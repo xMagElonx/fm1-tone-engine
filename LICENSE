@@ -1,0 +1,30 @@
+MIT License
+
+Copyright (c) 2026 x网友X
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---------------------------------------------------------------------------
+关于随附音色库（data/starter.js）与 starter/ 目录：那 32 个音色由本项目作者
+用 tools/make_starter.py 生成，特此声明为 CC0 1.0（公有领域），可无条件使用，
+不受上面 MIT 条款约束，也不需要署名。
+
+关于随附音色库之外的数据：本项目不分发任何第三方音色字节。data/factory.js
+与 ref/ 不在版本控制内；页面运行时从上游链接读取的内容不属于本项目的发行物。
+详见 LICENSE-AUDIT.md。

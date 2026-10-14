@@ -1,0 +1,13 @@
+# 含音色数据的生成物 —— 不进仓库。
+# 理由见 LICENSE-AUDIT.md：出厂音色的参数集权利链在 Yamaha 那一层就断了，
+# 上游仓库声明的 CC0 只覆盖它自己的贡献（抓包/解码/重组），不覆盖音色参数本身。
+# 这些文件留在本地，页面照常工作；使用者用 tools/fetch_ref.sh 自己重建。
+data/factory.js
+ref/
+demo/
+
+# 杂项
+*.log
+node_modules/
+__pycache__/
+.DS_Store

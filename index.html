@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FM-1 音色台</title>
+<style>
+  :root{
+    --bg:#F6F6F4; --panel:#FFFFFF; --line:#E2E1DC; --line2:#CFCEC8;
+    --ink:#23231F; --ink2:#5F5E5A; --ink3:#8A8983;
+    --accent:#185FA5; --accent-bg:#E6F1FB;
+    --ok:#0F6E56; --ok-bg:#E1F5EE;
+    --warn:#854F0B; --warn-bg:#FAEEDA;
+    --bad:#A32D2D; --bad-bg:#FCEBEB;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:400 13px/1.6 ui-sans-serif,system-ui,"Segoe UI","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:26px 20px 72px}
+  h1{font-size:19px;font-weight:500;margin:0 0 4px}
+  .sub{color:var(--ink2);font-size:12px;margin-bottom:20px}
+  h2{font-size:14px;font-weight:500;margin:0 0 10px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+         padding:16px 18px;margin-bottom:14px}
+  button,select,input{font:inherit;font-size:13px}
+  button{padding:6px 13px;border-radius:8px;border:1px solid var(--line2);
+         background:#fff;color:var(--ink);cursor:pointer}
+  button:hover{border-color:var(--ink3)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(.93)}
+  button.sm{padding:3px 9px;font-size:12px}
+  button:disabled{opacity:.45;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .grow{flex:1;min-width:180px}
+  .drop{border:1px dashed var(--line2);border-radius:10px;padding:16px;text-align:center;
+        color:var(--ink2);background:#FCFCFB;transition:.15s;font-size:12px}
+  .drop.over{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+  #log{font:400 12px/1.7 ui-monospace,Consolas,monospace;white-space:pre-wrap;
+       background:#FAFAF9;border:1px solid var(--line);border-radius:8px;
+       padding:12px;max-height:260px;overflow:auto;color:var(--ink2)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--line)}
+  th{color:var(--ink2);font-weight:400;position:sticky;top:0;background:var(--panel)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(226px,1fr));gap:9px}
+  .voice{border:1px solid var(--line);border-radius:10px;padding:10px 11px;background:#fff;
+         cursor:pointer;transition:.12s;position:relative}
+  .voice:hover{border-color:var(--accent);background:var(--accent-bg)}
+  .voice.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+  .voice .play{position:absolute;right:9px;top:9px;font-size:12px;color:var(--ink3)}
+  .voice:hover .play{color:var(--accent)}
+  .vname{font-weight:500;font-size:13px;padding-right:16px}
+  .vslot{color:var(--ink3);font-size:11px;font-variant-numeric:tabular-nums}
+  .vmeta{color:var(--ink2);font-size:11px;margin-top:2px}
+  .ops{display:flex;gap:3px;margin-top:7px;align-items:flex-end;height:24px}
+  .op{flex:1;background:var(--accent);border-radius:2px;opacity:.7;min-height:2px}
+  .op.car{opacity:1}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;
+       background:var(--bg);border:1px solid var(--line);color:var(--ink2)}
+  .tag.y{background:var(--warn-bg);border-color:#E9CE9A;color:var(--warn)}
+  .tag.b{background:var(--accent-bg);border-color:#BBD9F2;color:var(--accent)}
+  .kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:8px 16px;
+      font-size:12px;margin-bottom:12px}
+  .kv b{font-weight:400;color:var(--ink2);display:block;font-size:11px}
+  input[type=text],select{padding:5px 9px;border-radius:8px;border:1px solid var(--line2);
+      background:#fff;color:var(--ink);max-width:100%}
+  .hint{color:var(--ink3);font-size:11px}
+  .mono{font-family:ui-monospace,Consolas,monospace}
+  details summary{cursor:pointer;font-size:13px;color:var(--ink2);outline:none}
+  details summary:hover{color:var(--ink)}
+  #detail{display:none}
+  .algo{background:#FAFAF9;border:1px solid var(--line);border-radius:10px;padding:10px;
+        overflow:auto;margin-bottom:12px}
+  .empty{color:var(--ink3);text-align:center;padding:36px 0;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>FM-1 音色台</h1>
+  <div class="sub">浏览器里的 M-VAVE FM-1 音色引擎 · 检索 · 试听 · 说一句人话改音色 ·
+    导出 · 写入设备（需要一台 FM-1）· 可接大模型 · 双击本文件即可运行</div>
+
+  <div class="panel">
+    <details id="audit-box">
+      <summary>① 先证明它是对的 —— 解码器与试听引擎的自检</summary>
+      <div class="row" style="margin:10px 0">
+        <button class="primary" id="btn-audit">运行自检</button>
+        <span class="hint">对出厂音色逐一解码，检查每个参数是否落在 DX7 合法区间内</span>
+      </div>
+      <div id="log">尚未运行。</div>
+    </details>
+  </div>
+
+  <div class="panel">
+    <h2>② 音色库</h2>
+    <div class="row" id="factory-row" style="margin-bottom:10px"></div>
+    <div class="drop" id="drop">把 .syx 文件拖到这里，或
+      <button id="btn-file" class="sm" style="margin:0 4px">选择文件</button>
+      <div class="hint" style="margin-top:4px">
+        标准 Yamaha DX7 32 音色 bank，4104 字节（F0 43 00 09 20 00 … 校验和 F7）。
+        可一次拖入多个文件，全部并入下面的检索范围。</div>
+    </div>
+    <input type="file" id="file" accept=".syx,.SYX" multiple style="display:none">
+    <div class="row" id="bank-chips" style="margin-top:10px"></div>
+  </div>
+
+  <div class="panel">
+    <h2>③ 检索</h2>
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" class="grow" id="q" placeholder="搜索音色名、来源文件、原名、Yamaha 卡带编号…" spellcheck="false">
+      <select id="f-algo"><option value="-1">全部算法</option></select>
+      <select id="f-bank"><option value="all">全部来源</option></select>
+      <select id="f-sort">
+        <option value="slot">按槽位</option>
+        <option value="name">按名称</option>
+        <option value="bright">按亮度（暗→亮）</option>
+        <option value="dark">按亮度（亮→暗）</option>
+        <option value="algo">按算法</option>
+      </select>
+      <button id="btn-clear" class="sm">清空</button>
+    </div>
+    <div class="row">
+      <span class="hint" id="count" style="margin:0"></span>
+      <span style="flex:1"></span>
+      <label class="hint" style="display:flex;gap:5px;align-items:center;margin:0">
+        <input type="checkbox" id="autoplay" checked> 点选即试听</label>
+      <select id="note"></select>
+      <button id="btn-export-sel" class="sm">把结果前 32 个导出为一个 bank</button>
+    </div>
+  </div>
+
+  <div class="panel" id="detail">
+    <h2 id="detail-title">④ 音色详情</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="primary" id="btn-play">▶ 试听</button>
+      <button id="btn-wav">导出这段试听为 WAV</button>
+      <span style="flex:1"></span>
+      <button id="btn-close" class="sm">收起</button>
+    </div>
+    <div class="algo" id="algo"></div>
+    <div class="kv" id="detail-global"></div>
+    <div class="row" style="margin-bottom:10px;align-items:flex-end">
+      <div style="flex:1;max-width:260px">
+        <b style="font-weight:400;color:var(--ink2);font-size:11px">音色名（10 字符，仅 ASCII）</b>
+        <input type="text" id="rename" maxlength="10" spellcheck="false" style="width:100%">
+      </div>
+      <button id="btn-rename">应用改名</button>
+    </div>
+    <div id="detail-ops"></div>
+  </div>
+
+  <div class="panel" id="nl-panel">
+    <h2>⑤ 用一句话改音色</h2>
+    <div id="nl-settings"></div>
+    <div id="nl-body"></div>
+  </div>
+
+  <div class="panel" id="list-panel">
+    <div class="grid" id="voices"></div>
+    <div class="empty" id="empty">音色库为空。先载入出厂音色，或拖入你自己的 .syx。</div>
+  </div>
+
+  <div class="panel" id="write-panel">
+    <h2>⑥ 写入设备</h2>
+    <div id="midi-body"></div>
+  </div>
+
+  <div class="panel">
+    <h2>⑦ 出厂音色来源与授权</h2>
+    <div class="hint" style="margin:0 0 10px">
+      逐槽溯源：来自哪个 DX7 音色库文件、原名是什么、能否追溯回 Yamaha 官方卡带。
+      完整授权分析见仓库根目录的 <b>LICENSE-AUDIT.md</b>。
+      <span class="tag y">重要</span> 这批数据<b>不应随仓库分发</b>——原因见那份审计文档。
+    </div>
+    <input type="text" id="prov-q" placeholder="搜索音色名、来源文件或 Yamaha 卡带…" style="width:100%;margin-bottom:10px">
+    <div style="max-height:320px;overflow:auto"><table id="prov"></table></div>
+  </div>
+</div>
+
+<script src="engine/dx7.js"></script>
+<script src="engine/fm.js"></script>
+<script src="engine/midi.js"></script>
+<script src="engine/intent.js"></script>
+<script src="engine/llm.js"></script>
+<script src="data/starter.js"></script>
+<script src="data/factory.js"></script>
+<script>
+/* ============================================================================
+   界面层。格式解码在 engine/dx7.js，声音在 engine/fm.js，
+   这里只负责：音色库、检索、试听、导出。
+   ========================================================================= */
+const SR = 44100;
+
+/* ---------------------------------------------------------------- 状态 */
+const S = {
+  banks: [],        // { id, label, source, data(Uint8Array 4096), voices[], origin, factoryBase }
+  index: [],        // 打平的音色：{ key, bankId, slot, d, info, prov, ... }
+  query: '', algo: -1, bank: 'all', sort: 'slot',
+  sel: null,
+  note: 48, duration: 1.6, gate: 1.0,
+  autoplay: true,
+  ctx: null, src: null, lastBuf: null,
+  midi: { access: null, output: null, confirmed: false, log: '' },
+  nl: {
+    text: '', intent: null, result: null, undo: null,
+    source: 'local',        // 'local' = 本地词典（离线免费）；'llm' = 接大模型
+    providerId: 'deepseek', model: '', apiKey: '',
+    busy: false, testResult: null, promptOpen: false, settingsOpen: false,
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function noteName(m) { return DX7.NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1); }
+
+/* ---------------------------------------------------------------- 音色库 */
+function addBank(data, label, source, origin, factoryBase) {
+  const id = 'b' + S.banks.length;
+  const voices = [];
+  for (let i = 0; i < DX7.VOICES_PER_BANK; i++) {
+    const d = DX7.decodeVoice(data.slice(i * 128, i * 128 + 128));
+    voices.push({ d: d, info: DX7.describe(d, FM_ENGINE) });
+  }
+  const bank = { id, label, source, data, voices, origin, factoryBase: factoryBase || 0 };
+  S.banks.push(bank);
+  rebuildIndex();
+  renderBankChips();
+  renderFilterOptions();
+  renderResults();
+  return bank;
+}
+
+function rebuildIndex() {
+  S.index = [];
+  for (const b of S.banks) {
+    b.voices.forEach((v, slot) => {
+      S.index.push({
+        key: b.id + '#' + slot,
+        bankId: b.id, slot: slot,
+        d: v.d, info: v.info,
+        bankLabel: b.label, bankSource: b.source,
+        prov: provenanceOf(b, slot),
+        starter: starterOf(b, slot),
+      });
+    });
+  }
+}
+
+/* 只有出厂音色才有来源台账；用户自带的音色库没有 */
+function provenanceOf(bank, slot) {
+  if (bank.origin !== 'factory') return null;
+  const F = window.FM1_FACTORY;
+  if (!F || !F.provenance) return null;
+  return F.provenance[bank.factoryBase + slot] || null;
+}
+
+/* 随附原创音色库给每个音色配了一条"这个音色演示什么"。出厂音色没有这一项
+   —— 它有的是来源台账。两者都展示在详情面板里。 */
+function starterOf(bank, slot) {
+  if (bank.origin !== 'starter') return null;
+  const ST = window.FM1_STARTER;
+  if (!ST || !ST.design) return null;
+  return ST.design[slot] || null;
+}
+
+/* ---------------------------------------------------------------- 音色来源 */
+/* 出厂音色数据有两种取得方式，都不经过本仓库分发：
+     ① 本地：跑 tools/fetch_ref.sh + tools/build_assets.py，得到 data/factory.js
+     ② 运行时：页面自己在浏览器里从上游取原始字节并解析，不落盘、不进仓库
+   上游 raw.githubusercontent.com 返回 Access-Control-Allow-Origin: *，
+   所以从 file:// 双击打开的页面也能取到。 */
+const UPSTREAM_BANK = 'https://raw.githubusercontent.com/KingParamount/fm1-factory-presets'
+  + '/main/banks/FM-1_factory_128voices_packed.bin';
+
+function renderFactoryRow() {
+  const F = window.FM1_FACTORY;
+  const row = $('factory-row');
+  if (F) {
+    const contents = ['PIANO / ORGAN / SYN LEAD / SYN PAD', 'GUITAR / BASS',
+      'BRASS / WOODWIND / STRING / VOICE', '打击乐与音效'];
+    row.innerHTML =
+      '<span class="hint" style="margin:0">载入出厂音色：</span>'
+      + [0, 1, 2, 3].map(i => `<button data-bank="${i}">Bank ${String.fromCharCode(65 + i)} · ${contents[i]}</button>`).join('')
+      + '<button class="primary" data-bank="all">全部 128 个</button>';
+  } else {
+    row.innerHTML =
+      '<button class="primary" id="btn-upstream">取出 FM-1 出厂音色（128 个）</button>'
+      + '<span class="hint" style="margin:0">页面直接在浏览器里从上游取原始字节并解析，'
+      + '本仓库不分发这批数据（原因见 LICENSE-AUDIT.md）。</span>';
+  }
+}
+
+async function fetchUpstreamFactory(btn) {
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '正在取…';
+  try {
+    const res = await fetch(UPSTREAM_BANK, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const raw = new Uint8Array(await res.arrayBuffer());
+    if (raw.length !== 128 * 128) throw new Error(`长度 ${raw.length}，应为 16384`);
+    for (let i = 0; i < 4; i++) {
+      const label = '出厂 Bank ' + String.fromCharCode(65 + i);
+      if (S.banks.some(x => x.label === label)) continue;
+      addBank(raw.slice(i * DX7.BANK_BYTES, (i + 1) * DX7.BANK_BYTES), label,
+        'M-VAVE FM-1 出厂音色（页面运行时从上游取，未经本仓库分发）', 'factory', i * 32);
+    }
+    rebuildIndex();
+    renderFilterOptions();
+    renderResults();
+    btn.textContent = '已载入 128 个出厂音色';
+  } catch (err) {
+    // 断网、被墙、浏览器限制 file:// 取远程 —— 都要有明确出路，不能静默失败。
+    btn.disabled = false;
+    btn.textContent = orig;
+    alert('取不到出厂音色数据：' + err.message + '\n\n'
+      + '改用本地方式：\n'
+      + '  1. 运行 tools/fetch_ref.sh\n'
+      + '  2. 运行 python tools/build_assets.py\n'
+      + '  然后刷新本页。\n\n'
+      + '随附的 32 个原创音色不受影响，已经在列表里了。');
+  }
+}
+
+/* ---------------------------------------------------------------- 检索 */
+function filtered() {
+  const q = S.query.trim().toLowerCase();
+  const out = S.index.filter(v => {
+    if (S.bank !== 'all' && v.bankId !== S.bank) return false;
+    if (S.algo >= 0 && (v.d.algorithm & 31) !== S.algo) return false;
+    if (!q) return true;
+    const hay = [
+      v.d.name, v.bankLabel, v.bankSource,
+      v.prov ? v.prov.source : '', v.prov ? v.prov.original : '', v.prov ? v.prov.yamaha : '',
+      '算法' + v.info.algorithmPanel, 'alg' + v.info.algorithmPanel,
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  const cmp = {
+    /* 「按槽位」必须按数值排。原先写成 (bankLabel + slot) 的 localeCompare ——
+       那是字典序，于是顺序变成 0,1,10,11,…,19,2,20,…，一个 bank 里的
+       32 个音色会被打乱。这个 bug 是接入写入时被测试抓出来的：
+       页面写进设备的 32 个音色顺序跟源 bank 对不上，才回头看见它。
+       它一直也在影响「把结果前 32 个导出为一个 bank」那个按钮。 */
+    slot: (a, b) => a.bankLabel.localeCompare(b.bankLabel) || (a.slot - b.slot),
+    name: (a, b) => a.d.name.localeCompare(b.d.name),
+    bright: (a, b) => a.info.brightness - b.info.brightness,
+    dark: (a, b) => b.info.brightness - a.info.brightness,
+    algo: (a, b) => (a.d.algorithm - b.d.algorithm) || a.d.name.localeCompare(b.d.name),
+  }[S.sort];
+  return out.sort(cmp);
+}
+
+/* ---------------------------------------------------------------- 渲染 */
+function renderBankChips() {
+  $('bank-chips').innerHTML = S.banks.length === 0
+    ? '<span class="hint">还没有任何音色库。上面那一排出厂音色按钮是最快的起点。</span>'
+    : S.banks.map(b => `<span class="tag b">${esc(b.label)} · ${b.voices.length} 音色</span>`).join('');
+}
+
+function renderFilterOptions() {
+  const algos = new Set(S.index.map(v => v.d.algorithm & 31));
+  const cur = $('f-algo').value;
+  $('f-algo').innerHTML = '<option value="-1">全部算法</option>' +
+    [...algos].sort((a, b) => a - b).map(a => `<option value="${a}">算法 ${a + 1}</option>`).join('');
+  $('f-algo').value = algos.has(Number(cur)) ? cur : '-1';
+
+  const curB = $('f-bank').value;
+  $('f-bank').innerHTML = '<option value="all">全部来源</option>' +
+    S.banks.map(b => `<option value="${b.id}">${esc(b.label)}</option>`).join('');
+  if (S.banks.some(b => b.id === curB)) $('f-bank').value = curB;
+}
+
+function renderResults() {
+  const list = filtered();
+  $('count').textContent = S.index.length === 0
+    ? '音色库为空'
+    : (list.length === 0
+      ? `没有匹配的音色（音色库共 ${S.index.length} 个）`
+      : `匹配 ${list.length} / ${S.index.length} 个音色`);
+  $('empty').style.display = S.index.length === 0 ? '' : 'none';
+
+  const host = $('voices');
+  host.innerHTML = '';
+  const CAP = 400;
+  list.slice(0, CAP).forEach(v => {
+    const el = document.createElement('div');
+    el.className = 'voice' + (S.sel && S.sel.key === v.key ? ' sel' : '');
+    el.dataset.key = v.key;
+    const isCar = new Set(v.info.carriers);
+    const bars = [...v.d.ops].reverse().map(o =>
+      `<div class="op${isCar.has(o.num) ? ' car' : ''}" ` +
+      `title="OP${o.num}${isCar.has(o.num) ? ' 载波' : ' 调制器'} · 输出电平 ${o.outputLevel}" ` +
+      `style="height:${Math.max(2, Math.round(o.outputLevel / 99 * 24))}px"></div>`).join('');
+    el.innerHTML = `
+      <div class="play">▶</div>
+      <div class="vname">${esc(v.d.name) || '<i>（空）</i>'}</div>
+      <div class="vslot">${esc(v.bankLabel)} #${String(v.slot).padStart(2, '0')}</div>
+      <div class="vmeta">算法 ${v.info.algorithmPanel} · 载波 ${v.info.carrierCount} · 反馈 ${v.d.feedback}</div>
+      <div class="ops" title="六个算子的输出电平，从左到右 OP1→OP6；实心=载波">${bars}</div>`;
+    el.onclick = () => selectVoice(v, true);
+    host.appendChild(el);
+  });
+  if (list.length > CAP) {
+    const el = document.createElement('div');
+    el.className = 'empty';
+    el.textContent = `只显示前 ${CAP} 条。缩小检索范围可以看到其余 ${list.length - CAP} 条。`;
+    host.appendChild(el);
+  }
+  /* 写入区里的「将要写入的 32 个」跟着检索结果走，所以这里一并重画 */
+  renderMidi();
+}
+
+function selectVoice(v, play) {
+  S.sel = v;
+  /* 预览是绑在那个锚点上的：换了音色，之前算出来的改动就不再属于当前对象，
+     必须丢掉 —— 否则会把 A 音色的改动留到 B 音色上。 */
+  S.nl.result = null; S.nl.intent = null;
+  document.querySelectorAll('.voice').forEach(el =>
+    el.classList.toggle('sel', el.dataset.key === v.key));
+  showDetail(v);
+  renderNl();
+  if (play && S.autoplay) playVoice(v);
+}
+
+/* ---------------------------------------------------------------- 详情 */
+function showDetail(v) {
+  const d = v.d, info = v.info;
+  $('detail').style.display = '';
+  $('detail-title').textContent = `④ 音色详情 — ${d.name.trim() || '（空）'}`;
+  $('rename').value = d.name;
+  $('rename').dataset.key = v.key;
+  $('algo').innerHTML = algoSvg(d.algorithm, d);
+
+  const rows = [
+    ['槽位', `${esc(v.bankLabel)} #${v.slot}`],
+    ['算法', `${info.algorithmPanel} / 32 · 载波 [${info.carriers.join(', ')}]`],
+    ['反馈', String(d.feedback)],
+    ['振荡器同步', d.oscKeySync ? '开' : '关'],
+    ['移调', `${DX7.transposeName(d.transpose)}（${d.transpose}）`],
+    ['LFO 波形', DX7.LFO_WAVE[d.lfoWave] ?? d.lfoWave],
+    ['LFO 速度 / 延迟', `${d.lfoSpeed} / ${d.lfoDelay}`],
+    ['LFO 音高 / 振幅调制深度', `${d.lfoPitchModDepth} / ${d.lfoAmpModDepth}`],
+    ['LFO 音高调制灵敏度 / 同步', `${d.lfoPitchModSens} / ${d.lfoSync ? '开' : '关'}`],
+    ['音高包络 rate', d.pitchEgR.join(' · ')],
+    ['音高包络 level', d.pitchEgL.join(' · ')],
+    ['亮度（调制器电平均值）', `${info.brightness.toFixed(1)} / 99`],
+  ];
+  if (v.prov) {
+    rows.push(['来源文件', `<span class="mono" style="font-size:11px">${esc(v.prov.source)}</span>`]);
+    rows.push(['原名', esc(v.prov.original)]);
+    rows.push(['Yamaha 卡带', v.prov.yamaha ? `<span class="tag y">${esc(v.prov.yamaha)}</span>` : '—']);
+  }
+  if (v.starter) {
+    rows.push(['设计说明', `<span style="font-size:11px;line-height:1.75">${esc(v.starter.idea)}</span>`]);
+  }
+  $('detail-global').innerHTML = rows.map(([k, val]) => `<div><b>${esc(k)}</b>${val}</div>`).join('');
+
+  const tr = d.ops.map(o => `<tr>
+      <td>OP${o.num}</td>
+      <td>${info.carriers.includes(o.num) ? '<span class="tag b">载波</span>' : '调制器'}</td>
+      <td class="mono">${o.egR.join(' ')}</td>
+      <td class="mono">${o.egL.join(' ')}</td>
+      <td class="mono">${o.breakPoint}</td>
+      <td class="mono">${o.leftDepth}/${o.rightDepth}</td>
+      <td class="mono">${DX7.CURVE[o.leftCurve]}/${DX7.CURVE[o.rightCurve]}</td>
+      <td class="mono">${o.rateScale}</td>
+      <td class="mono">${o.keyVelSens}</td>
+      <td class="mono">${o.ampModSens}</td>
+      <td class="mono"><b>${o.outputLevel}</b></td>
+      <td class="mono">${o.oscMode ? '固定' : '比率'}</td>
+      <td class="mono">${o.freqCoarse}</td>
+      <td class="mono">${o.freqFine}</td>
+      <td class="mono">${o.detune - 7 > 0 ? '+' : ''}${o.detune - 7}</td>
+    </tr>`).join('');
+  $('detail-ops').innerHTML = `<div style="overflow:auto"><table>
+    <tr><th>算子</th><th>角色</th><th>EG R1-4</th><th>EG L1-4</th><th>断点</th><th>左/右深度</th>
+        <th>左/右曲线</th><th>速率缩放</th><th>力度灵敏度</th><th>振幅调制灵敏度</th>
+        <th>输出电平</th><th>模式</th><th>粗调</th><th>微调</th><th>失谐</th></tr>${tr}</table></div>`;
+  $('detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* 算法结构图：每个载波一列，调制器向上堆叠；共用调制器在每列各画一次 */
+function algoSvg(algoByte, d) {
+  const plan = FM_ENGINE.compiled(algoByte & 31);
+  const depth = new Array(plan.nodes.length).fill(0);
+  for (let i = 0; i < plan.nodes.length; i++) {
+    let dep = 0;
+    for (const s of plan.nodes[i].srcs) dep = Math.max(dep, depth[s] + 1);
+    depth[i] = dep;
+  }
+  const maxDepth = Math.max(...depth);
+  const cols = plan.carriers.length;
+  const W = 50, H = 26, GX = 30, GY = 16, PAD = 12;
+
+  const box = (x, y, idx, isCar) => {
+    const node = plan.nodes[idx];
+    const o = d.ops[6 - node.op];
+    const fb = (idx === plan.fbSrc) ? ' ↻' : '';
+    return `<g>
+      <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="5"
+            fill="${isCar ? '#E6F1FB' : '#FFFFFF'}" stroke="${isCar ? '#185FA5' : '#CFCEC8'}"
+            stroke-width="${isCar ? 1.4 : 1}"/>
+      <text x="${x + 7}" y="${y + 17}" font-size="11" fill="#23231F"
+            font-family="ui-monospace,Consolas,monospace">OP${node.op}</text>
+      <text x="${x + W - 6}" y="${y + 17}" font-size="10" fill="#8A8983" text-anchor="end"
+            font-family="ui-monospace,Consolas,monospace">${o.outputLevel}${fb}</text>
+    </g>`;
+  };
+  const arrow = (x1, y1, x2, y2) =>
+    `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#8A8983" stroke-width="1"
+           marker-end="url(#ah)"/>`;
+
+  let body = '';
+  plan.carriers.forEach((carIdx, c) => {
+    const x = PAD + c * (W + GX);
+    const items = [];
+    (function walk(idx) {
+      for (const s of plan.nodes[idx].srcs) walk(s);
+      items.push(idx);
+    })(carIdx);
+    const ys = {};
+    for (const idx of items) {
+      const y = PAD + (maxDepth - depth[idx]) * (H + GY);
+      ys[idx] = y;
+      body += box(x, y, idx, idx === carIdx);
+    }
+    for (const idx of items)
+      for (const s of plan.nodes[idx].srcs)
+        body += arrow(x + W / 2, ys[s] + H, x + W / 2, ys[idx]);
+  });
+
+  const width = PAD * 2 + cols * W + (cols - 1) * GX;
+  const height = PAD * 2 + (maxDepth + 1) * H + maxDepth * GY;
+  const fbNote = plan.fbSrc === plan.fbDst
+    ? `反馈在 OP${plan.nodes[plan.fbSrc].op}（自反馈）`
+    : `反馈 OP${plan.nodes[plan.fbSrc].op} → OP${plan.nodes[plan.fbDst].op}`;
+
+  return `<div class="row" style="margin-bottom:8px;align-items:baseline">
+      <b style="font-size:13px;font-weight:500">算法 ${(algoByte & 31) + 1}</b>
+      <span class="hint">${cols} 条并行支路 · 载波 ${cols} 个 · 调制器 ${6 - cols} 个 · ${fbNote}</span>
+    </div>
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6"
+        orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8A8983"/></marker></defs>
+      ${body}
+    </svg>
+    <div class="hint" style="margin-top:6px">
+      实心蓝框是载波（能被听见），白框是调制器（只改变载波的音色）。框内右下角数字是输出电平，
+      ↻ 表示反馈落在这个算子上。共用同一个调制器的算法（如 19–25）在这张图里每列各画一次。
+    </div>`;
+}
+
+/* ---------------------------------------------------------------- 试听 */
+function getCtx() {
+  if (!S.ctx) S.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (S.ctx.state === 'suspended') S.ctx.resume();
+  return S.ctx;
+}
+
+/* 试听一份"音色对象"。A/B 对比要能听的不只是选中的那个音色，
+   还有被一句话改过之后的临时结果 —— 所以把渲染和播放拆开。 */
+function playRendered(d) {
+  const buf = FM_ENGINE.render(d, {
+    sampleRate: SR, duration: S.duration, gate: S.gate, note: S.note,
+  });
+  S.lastBuf = buf;
+  // 先渲染、后播放：这样即便环境里没有 Web Audio（比如被自动化脚本驱动），
+  // 试听结果依然存在，导出 WAV 也照常可用，只是没有声音。
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  const ctx = getCtx();
+  if (S.src) { try { S.src.stop(); } catch (e) { /* 已经播完 */ } }
+  const ab = ctx.createBuffer(1, buf.length, SR);
+  ab.copyToChannel(buf, 0);
+  const src = ctx.createBufferSource();
+  src.buffer = ab;
+  src.connect(ctx.destination);
+  src.start();
+  S.src = src;
+}
+
+function playVoice(v) { playRendered(v.d); }
+
+function download(bytes, name) {
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ------------------------------------------------------------ 写入设备 */
+/* 第 1 层：把页面里的音色送进设备。三条边界是硬的，界面必须守住 ——
+     · FM-1 只接收、不发送 —— 设备里的音色读不出来，所以写入不可逆
+     · 一次写入是一整块 bank（32 个槽），不是一个音色
+     · 标准 bank dump 没有任何应答 ——「发出去了」不等于「写进去了」
+   全部依据见仓库根目录的 MIDI-WRITE.md。 */
+
+/* 写进去的就是你现在检索到的东西 —— 智能全在筛选里，写入只是换一个出口。
+   这跟「把结果前 32 个导出为一个 bank」是同一份数据的两个去向：文件 / 设备。 */
+function writeCandidates() { return filtered().slice(0, DX7.VOICES_PER_BANK); }
+
+function midiWarnBox() {
+  return `<div style="background:var(--warn-bg);border:1px solid #E9CE9A;border-radius:10px;
+      padding:10px 12px;margin-bottom:12px;color:var(--warn);font-size:12px;line-height:1.65">
+      <b style="font-weight:500">写入会覆盖设备里那一整块 bank 的 32 个槽，而且撤销不了。</b><br>
+      FM-1 只接收、不发送 —— 设备里原有的音色<b>读不出来</b>，所以被覆盖的内容无法从设备上取回。
+      机身自带的「恢复」也救不了：它恢复的是上次导入的那一套，不是出厂那套。<br>
+      标准 bank dump 也没有应答：页面只能告诉你<b>字节已经发出</b>，不能告诉你设备已经收下 ——
+      收没收到，要你到琴上去确认。
+    </div>`;
+}
+
+function renderMidi() {
+  const host = $('midi-body');
+  const M = S.midi;
+
+  if (!FM1MIDI.isSupported()) {
+    host.innerHTML = `<div class="hint" style="font-size:12px;line-height:1.7">
+      ${esc(FM1MIDI.unsupportedReason())}<br>
+      Chrome / Edge / Opera 都自带这个能力。它还要求页面处于安全上下文（https 或本机地址）——
+      直接双击打开的 file:// 页面在部分浏览器版本上会被拒绝。遇到这种情况，
+      跑一下仓库里的 <span class="mono">tools/serve.cmd</span>（或
+      <span class="mono">node tools/serve.mjs</span>）起一个本机地址再打开。<br>
+      没有设备也不影响这个页面其余部分：检索、试听、导出都照常。</div>`;
+    return;
+  }
+
+  if (!M.access) {
+    host.innerHTML = `
+      <div class="row" style="margin-bottom:8px">
+        <button class="primary" id="btn-midi-connect">连接 MIDI 设备</button>
+        <span class="hint" style="margin:0">会弹两次授权：先 MIDI，再 SysEx。
+          SysEx 那一次必须点允许 —— 拒绝的话消息会被静默丢弃，表现成「点了没反应」。</span>
+      </div>
+      <div id="midi-log" class="hint" style="font-size:12px"></div>`;
+    $('btn-midi-connect').onclick = connectMidi;
+    return;
+  }
+
+  const outputs = FM1MIDI.listOutputs(M.access);
+  const cands = writeCandidates();
+  const enough = cands.length >= DX7.VOICES_PER_BANK;
+  const total = filtered().length;
+
+  const portOpts = outputs.length
+    ? outputs.map(p => {
+        const sel = M.output && M.output.id === p.id ? ' selected' : '';
+        const mark = FM1MIDI.looksLikeFm1(p) ? ' ★' : '';
+        return `<option value="${esc(p.id)}"${sel}>${esc(FM1MIDI.portLabel(p))}${mark}</option>`;
+      }).join('')
+    : '<option value="">（没有找到任何输出端口）</option>';
+
+  const preview = cands.map((v, i) =>
+    `<span class="tag" title="${esc(v.bankLabel)} #${v.slot}">${i + 1}. ${esc(v.d.name) || '（空）'}</span>`
+  ).join(' ');
+
+  host.innerHTML = `
+    <div class="row" style="margin-bottom:12px">
+      <span class="hint" style="margin:0">输出端口</span>
+      <select id="midi-port" class="grow">${portOpts}</select>
+      <button class="sm" id="btn-midi-refresh">重新扫描</button>
+    </div>
+    ${midiWarnBox()}
+    <div style="margin-bottom:8px">
+      <b style="font-weight:400;color:var(--ink2);font-size:11px">将要写入的 32 个槽</b>
+      <span class="hint">（当前检索结果的前 32 个${total > 32 ? `，另有 ${total - 32} 个不会被写入` : ''}）</span>
+    </div>
+    <div style="background:#FAFAF9;border:1px solid var(--line);border-radius:10px;
+        padding:10px;margin-bottom:12px;line-height:2.1;max-height:150px;overflow:auto">
+      ${cands.length ? preview : '<span class="hint">当前没有检索到任何音色</span>'}
+    </div>
+    ${enough ? '' : `<div class="hint" style="color:var(--bad);margin-bottom:10px">
+      检索结果只有 ${cands.length} 个，不够 32 个。一块 bank 固定 32 个槽，写不满会把设备里
+      其余的槽变成空音色 —— 所以这里不让你写。放宽筛选条件凑够 32 个再来。</div>`}
+    <div class="row" style="margin-bottom:10px">
+      <label class="hint" style="display:flex;gap:6px;align-items:center;margin:0">
+        <input type="checkbox" id="midi-confirm"${M.confirmed ? ' checked' : ''}>
+        我明白这会覆盖设备里那一整块 bank，而且找不回来</label>
+    </div>
+    <div class="row">
+      <button class="primary" id="btn-midi-write"${enough && M.confirmed ? '' : ' disabled'}>
+        写入设备（32 个音色）</button>
+      <button class="sm" id="btn-midi-export">先把这一块导出为 .syx 存档</button>
+    </div>
+    <div id="midi-log" class="hint" style="font-size:12px;margin-top:10px;line-height:1.7"></div>`;
+
+  $('midi-port').onchange = () => {
+    const id = $('midi-port').value;
+    M.output = outputs.find(p => p.id === id) || null;
+  };
+  $('btn-midi-refresh').onclick = () => {
+    M.output = FM1MIDI.pickOutput(FM1MIDI.listOutputs(M.access));
+    renderMidi();
+  };
+  $('midi-confirm').onchange = () => { M.confirmed = $('midi-confirm').checked; renderMidi(); };
+  $('btn-midi-write').onclick = doWrite;
+  $('btn-midi-export').onclick = () => {
+    download(DX7.buildBank(packCandidates()), `FM-1_写前存档_${stamp()}.syx`);
+  };
+  if (M.log) $('midi-log').innerHTML = M.log;
+}
+
+/* 把候选音色装进一块 4096 字节的 bank。不足 32 个的位置留空（全零），
+   但界面在不足时不会放行，所以这条路径只在测试里走到。 */
+function packCandidates() {
+  const cands = writeCandidates();
+  const bank = new Uint8Array(DX7.BANK_BYTES);
+  for (let i = 0; i < cands.length && i < DX7.VOICES_PER_BANK; i++) {
+    bank.set(cands[i].d.raw, i * DX7.VOICE_BYTES);
+  }
+  return bank;
+}
+
+function stamp() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+async function connectMidi() {
+  const btn = $('btn-midi-connect');
+  const log = $('midi-log');
+  if (btn) { btn.disabled = true; btn.textContent = '正在请求授权…'; }
+  try {
+    const access = await FM1MIDI.requestAccess();
+    S.midi.access = access;
+    S.midi.output = FM1MIDI.pickOutput(FM1MIDI.listOutputs(access));
+    /* 设备中途插拔时刷新端口列表 */
+    try { access.onstatechange = () => renderMidi(); } catch (e) { /* 有的实现是只读的 */ }
+    S.midi.log = S.midi.output
+      ? `已连接。已自动选中「${esc(FM1MIDI.portLabel(S.midi.output))}」。`
+      : '已连接。但系统上有多个输出端口、没有一个名字像 FM-1 —— 请在上面手动选一个。';
+    renderMidi();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = '连接 MIDI 设备'; }
+    const msg = `<span style="color:var(--bad)">${esc(err.message)}</span>`;
+    if (log) log.innerHTML = msg;
+    else alert('连接失败：' + err.message);
+  }
+}
+
+function doWrite() {
+  const M = S.midi;
+  const log = $('midi-log');
+  try {
+    const bank = packCandidates();
+    const report = FM1MIDI.sendBank(M.output, bank, { label: '检索结果前 32 个' });
+    M.log = `<span style="color:var(--ok)">已发出 ${report.bytes} 字节 · 包 ${report.header} · `
+      + `校验和 0x${report.checksum.toString(16).padStart(2, '0')} · `
+      + `${report.voices} 个音色 · 端口 ${esc(report.port)} · 耗时 ${report.ms.toFixed(1)} ms</span><br>
+      <b style="font-weight:500">注意：这只是「字节已经发出去」，不是「设备已经收下」</b> ——
+      标准 bank dump 没有应答。请到琴上切换 bank 确认那 32 个音色变了没有。<br>
+      建议现在就点上面的「导出为 .syx 存档」，把这次写进去的内容留一份副本。`;
+    renderMidi();
+  } catch (err) {
+    M.log = `<span style="color:var(--bad)">写入失败：${esc(err.message)}</span>`;
+    renderMidi();
+  }
+}
+
+/* ------------------------------------------------ 用一句话改音色（第 3 层）
+   设计前提是「以现有音色为锚点」：不凭空生成，只在选中的那个音色上做有方向的微调。
+   三条理由都是硬的 ——
+     · 有锚点，改动就小、能解释：界面上逐条列出动了哪个参数的哪一项；
+     · 有锚点，就能 A/B 试听、不满意直接丢掉，原音色一个字节都不动；
+     · 有锚点，"改得对不对"才可验证 —— tools/intent_test.mjs 里说「更亮」，
+       就要求真的渲染一遍、真的量出频谱上移，192 个音色逐个过。
+   解析在 engine/intent.js 里，是纯本地的词典：不联网、不花钱。
+   那一层可以整个换成大模型 —— 产出的仍是同一种意图对象，这里一行都不用改。 */
+
+const NL_EXAMPLES = ['亮一点', '暗一点', '尾巴拖长些', '干脆一点',
+  '起音慢一点', '更厚更宽', '干净一点', '不要太亮'];
+
+const NL_AXES = [
+  ['bright', '亮度', '亮 / 暗 / 通透 / 温润 / 金属'],
+  ['sustain', '延音', '尾巴长 / 余音 / 干脆 / 颗粒'],
+  ['attack', '起音', '渐入 / 淡入 / 柔和起音 / 硬起音'],
+  ['width', '厚度', '厚 / 薄 / 饱满 / 合唱 / 失谐'],
+  ['feedback', '尖锐度', '啸叫 / 沙哑 / 粗糙 / 干净 / 平滑'],
+];
+
+/* ============================================================================
+   大模型接入（可选）
+   ----------------------------------------------------------------------------
+   这一层能被整体换掉，是因为 engine/intent.js 定下的意图格式没变：
+   模型产出的东西和本地词典产出的东西是同一种，所以下面的渲染、应用、
+   撤销逻辑一行都不用改。
+
+   三件事要一直让人看得见，看不到就等于没做：
+     ① 这次是谁答的（本地词典 / 哪一家模型）
+     ② 模型原话说了什么、我们丢掉了它给的什么
+     ③ 到底发了什么给模型 —— 藏起提示词就没法解释"它这次为什么答得不好"
+   最后一条是这个功能唯一有说服力的地方：别人接大模型停在"生成了"，
+   这里还要回答"改对了没有"。
+   ========================================================================= */
+const LLM = (typeof FM1_LLM !== 'undefined') ? FM1_LLM : null;
+
+/* 这些说法本地词典一个都认不出来 —— 它认的是字面词，不是意思。
+   放在这里是为了让"接了大模型之后多了什么"是看得见的，而不是靠嘴说。 */
+const NL_LLM_EXAMPLES = ['像老式电钢那样，但更清脆一点', '要有铜管那种厚度，但别糊',
+  '一按下去就出来，不要渐入', '尾巴收干净，别拖泥带水'];
+
+function nlProvider() { return LLM ? LLM.providerById(S.nl.providerId) : null; }
+
+function nlModel() {
+  const box = $('nl-model');
+  const typed = (box && box.value) ? String(box.value).trim() : '';
+  return typed || S.nl.model || (nlProvider() ? nlProvider().model : '');
+}
+
+/* Key 优先取输入框里的（用户刚敲的），没有再取记住的那一份。
+   这个顺序让"敲完直接解析"就能用，不必先点一次保存。 */
+function nlCurrentKey() {
+  const box = $('nl-key');
+  const typed = (box && box.value) ? String(box.value).trim() : '';
+  return typed || S.nl.apiKey || '';
+}
+
+/* 单独抽出来，是为了让端到端测试能塞一个假的 fetch 进来。
+   正常运行时它就是浏览器自己的 fetch。 */
+function nlFetcher() { return (typeof fetch === 'function') ? fetch : null; }
+
+function nlKeyState() {
+  const k = S.nl.apiKey || '';
+  if (!k) return '未填';
+  return '已填 · 末尾 ' + k.slice(-4);
+}
+
+function nlPromptPreview() {
+  if (!LLM || !S.sel) return '（先在上面 ③ 检索里点一个音色）';
+  let req;
+  try {
+    req = LLM.buildRequest({ provider: nlProvider(), model: nlModel(),
+      text: S.nl.text || '（还没输入）', voice: S.sel.d, apiKey: S.nl.apiKey });
+  } catch (e) { return '拼不出提示词：' + e.message; }
+  return 'POST ' + req.url + '\n'
+    + 'Authorization: Bearer ' + (S.nl.apiKey ? '••••••（已填，不显示）' : '（未填）') + '\n'
+    + 'Content-Type: application/json\n\n'
+    + JSON.stringify(req.body, null, 2);
+}
+
+function nlSettingsBlock() {
+  if (!LLM) {
+    return `<div class="hint" style="font-size:12px;line-height:1.7;margin-bottom:8px">
+      <span class="tag y">接入层没载入</span>
+      找不到 <span class="mono">engine/llm.js</span>，所以只能用本地词典。
+      本地词典照样能用（离线、免费），只是只认字面说法。</div>`;
+  }
+  const on = S.nl.source === 'llm';
+  const p = nlProvider();
+  const storeOk = LLM.storageAvailable();
+  const t = S.nl.testResult;
+  const openAttr = (S.nl.settingsOpen || on) ? ' open' : '';
+
+  const provOpts = LLM.PROVIDERS.map(x =>
+    `<option value="${x.id}"${x.id === S.nl.providerId ? ' selected' : ''}>${esc(x.label)}</option>`
+  ).join('');
+
+  const body = !on ? '' : `
+    <div class="row" style="margin-bottom:6px">
+      <span class="hint" style="margin:0">服务商</span>
+      <select id="nl-provider">${provOpts}</select>
+      <span class="hint" style="margin:0">模型</span>
+      <input type="text" id="nl-model" spellcheck="false" style="min-width:190px"
+        value="${esc(S.nl.model)}" placeholder="${esc(p ? p.model : '')}">
+    </div>
+    <div class="row" style="margin-bottom:4px">
+      <input type="password" id="nl-key" class="grow" spellcheck="false" autocomplete="off"
+        placeholder="${p && p.needsKey ? 'API Key —— 填了就会记住（存在你这台机器上）' : '这一家不需要 API Key'}">
+      <span class="hint" style="margin:0" id="nl-keystate">${esc(nlKeyState())}</span>
+      <button class="sm" id="btn-nl-clearkey">清除</button>
+      <button class="sm" id="btn-nl-test"${S.nl.busy ? ' disabled' : ''}>测试连接</button>
+    </div>
+    <div class="hint" style="font-size:12px;line-height:1.7;margin-bottom:6px">
+      ${esc(p ? p.note : '')}${p && p.keyUrl ? `<br>Key 在这里申请：<span class="mono">${esc(p.keyUrl)}</span>` : ''}
+      <br>Key ${storeOk
+        ? '只存在你这台机器的浏览器里（localStorage），不上传到任何别的地方'
+        : '<b>存不住</b>（这个环境禁用了 localStorage）—— 只在本次打开期间有效'}；
+      请求直接发给你填的那个地址，不经过本页以外的任何服务器。
+      <br>模型答不上来时会自动退回本地词典，并说明是为什么。
+    </div>
+    ${t ? `<div class="hint" style="font-size:12px;margin-bottom:6px;color:${t.ok ? 'var(--ok)' : 'var(--warn)'}">
+      ${t.ok ? '✓ ' : '× '}${esc(t.text)}</div>` : ''}
+    <div class="hint" style="font-size:12px;margin-bottom:6px">
+      <a href="#" id="nl-prompt-toggle">${S.nl.promptOpen ? '收起' : '看看这次会发什么给模型'}</a>
+    </div>
+    ${S.nl.promptOpen ? `<pre class="mono" style="white-space:pre-wrap;font-size:11px;line-height:1.6;
+      background:#FAFAF9;border:1px solid var(--line);border-radius:8px;padding:9px;
+      max-height:260px;overflow:auto;margin:0 0 10px">${esc(nlPromptPreview())}</pre>` : ''}`;
+
+  return `<details id="nl-settings-details"${openAttr}>
+      <summary>解析方式：<b>${on ? '接大模型' : '只用本地词典（离线免费）'}</b>
+        <span class="hint">—— 点开可以改成接大模型</span></summary>
+      <div style="margin-top:10px">
+        <div class="row" style="margin-bottom:8px">
+          <select id="nl-source">
+            <option value="local"${on ? '' : ' selected'}>只用本地词典（离线、免费、只认字面说法）</option>
+            <option value="llm"${on ? ' selected' : ''}>接大模型（任何 OpenAI 兼容接口）</option>
+          </select>
+          <span class="tag${on ? ' b' : ''}">${on ? '大模型 · ' + esc(p ? p.label : '') : '本地词典'}</span>
+        </div>
+        ${body}
+      </div>
+    </details>`;
+}
+
+function nlWhoBadge(intent) {
+  if (intent && intent.source === 'llm') {
+    const p = nlProvider();
+    const conf = (typeof intent.confidence === 'number')
+      ? ' · 自评 ' + Math.round(intent.confidence * 100) + '%' : '';
+    return `<span class="tag b">大模型${p ? ' · ' + esc(p.label) : ''}${conf}</span>`;
+  }
+  return '<span class="tag">本地词典</span>';
+}
+
+/* 模型的原话、我们丢掉了什么、为什么没用上模型 —— 全部照样显示。
+   把失败摊开讲，比给一个漂亮但来路不明的结果可信。 */
+function nlSayBlock(intent) {
+  const bits = [];
+  if (intent.reason && intent.source === 'llm') bits.push('模型的说明：' + esc(intent.reason));
+  if (intent.fallbackReason) bits.push('没用上模型：' + esc(intent.fallbackReason));
+  (intent.notes || []).forEach(n => bits.push('· ' + esc(n)));
+  if (!bits.length) return '';
+  return `<div class="hint" style="font-size:12px;line-height:1.7;margin:4px 0 8px">${
+    bits.join('<br>')}</div>`;
+}
+
+function renderNlSettings() {
+  const host = $('nl-settings');
+  if (!host) return;
+  host.innerHTML = nlSettingsBlock();
+  bindNlSettings();
+}
+
+function bindNlSettings() {
+  if (!LLM) return;
+  const det = $('nl-settings-details');
+  if (det) det.ontoggle = () => { S.nl.settingsOpen = !!det.open; };
+
+  if ($('nl-source')) $('nl-source').onchange = () => {
+    S.nl.source = $('nl-source').value;
+    S.nl.intent = null; S.nl.result = null; S.nl.testResult = null;
+    LLM.saveConfig({ source: S.nl.source, providerId: S.nl.providerId });
+    renderNlSettings(); renderNl();
+  };
+  if ($('nl-provider')) $('nl-provider').onchange = () => {
+    S.nl.providerId = $('nl-provider').value;
+    S.nl.model = ''; S.nl.testResult = null;
+    LLM.saveConfig({ source: S.nl.source, providerId: S.nl.providerId });
+    renderNlSettings();
+  };
+  if ($('nl-model')) $('nl-model').oninput = () => { S.nl.model = $('nl-model').value; };
+  if ($('btn-nl-clearkey')) $('btn-nl-clearkey').onclick = () => {
+    S.nl.apiKey = ''; LLM.saveKey(''); S.nl.testResult = null; renderNlSettings();
+  };
+  if ($('btn-nl-test')) $('btn-nl-test').onclick = nlTestConnection;
+  if ($('nl-prompt-toggle')) $('nl-prompt-toggle').onclick = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    S.nl.promptOpen = !S.nl.promptOpen;
+    renderNlSettings();
+  };
+}
+
+/* 「测试连接」故意拿"亮一点"这句去试 —— 它既能验证通不通，
+   也能顺带看出这家模型认不认我们那套轴的约定。 */
+async function nlTestConnection() {
+  const p = nlProvider();
+  if (!p || !p.url) {
+    S.nl.testResult = { ok: false, text: '先在下面选一个服务商，或给"自定义"填上基地址' };
+    renderNlSettings(); return;
+  }
+  const typed = ($('nl-key') && $('nl-key').value) ? String($('nl-key').value).trim() : '';
+  if (typed) { S.nl.apiKey = typed; LLM.saveKey(typed); }
+  S.nl.busy = true; S.nl.testResult = null;
+  renderNlSettings();
+
+  let r;
+  try {
+    r = await LLM.call({
+      text: '亮一点', voice: S.sel ? S.sel.d : null, provider: p, model: nlModel(),
+      apiKey: nlCurrentKey(), fetchImpl: nlFetcher(), timeoutMs: 20000,
+    });
+  } catch (e) {
+    r = { source: 'local', fallbackReason: '出了意外：' + (e && e.message ? e.message : e) };
+  }
+  S.nl.busy = false;
+  if (r.source === 'llm' && r.ok) {
+    const got = Object.keys(r.axes || []).length
+      ? Object.keys(r.axes).map(k => LLM.axisLabel(k) + ' ' + r.axes[k]).join('、')
+      : '（它没给出轴）';
+    S.nl.testResult = { ok: true, text: '通了。让它拿"亮一点"试了一句，它回的是：' + got };
+  } else if (r.source === 'llm') {
+    S.nl.testResult = { ok: true, text: '通了 —— 模型答复了，只是它认为这句话用这五个轴表达不了：'
+      + (r.reason || '') };
+  } else {
+    S.nl.testResult = { ok: false, text: '没通：' + (r.fallbackReason || '未知原因') };
+  }
+  renderNlSettings();
+}
+
+function nlAxisLine(intent) {
+  const hit = {};
+  intent.matched.forEach(m => { hit[m.axis] = m.words; });
+  return NL_AXES.map(([key, label]) => {
+    const v = intent.axes[key];
+    if (v === undefined) return `<span class="tag" style="opacity:.45">${label}</span>`;
+    const dir = v > 0 ? '↑' : '↓';
+    const strong = Math.abs(v) >= 0.85 ? '强' : (Math.abs(v) <= 0.35 ? '弱' : '中');
+    return `<span class="tag b" title="由「${esc(hit[key] || '')}」认出">${label} ${dir} ${strong}</span>`;
+  }).join(' ');
+}
+
+function nlAnchorLine() {
+  const v = S.sel;
+  return `<div class="row" style="margin-bottom:8px;align-items:baseline">
+      <span class="hint" style="margin:0">锚点</span>
+      <b>${esc(v.d.name.trim() || '（空）')}</b>
+      <span class="hint" style="margin:0">${esc(v.bankLabel)} #${v.slot} · 算法 ${v.info.algorithmPanel}</span>
+      <span style="flex:1"></span>
+      <button class="sm" id="btn-nl-sample">试听原音色</button>
+      ${S.nl.undo ? '<button class="sm" id="btn-nl-undo">撤销上一次改动</button>' : ''}
+    </div>`;
+}
+
+function nlInputBlock() {
+  return `<div class="row" style="margin-bottom:8px">
+      <input type="text" id="nl-text" class="grow" spellcheck="false"
+        placeholder="比如：亮一点，尾巴拖长些" value="${esc(S.nl.text)}">
+      <button class="primary" id="btn-nl-parse">解析这句话</button>
+    </div>
+    <div class="row" style="margin-bottom:6px">${NL_EXAMPLES.map((t, i) =>
+      `<button class="sm" id="nl-ex-${i}">${esc(t)}</button>`).join('')}</div>
+    ${S.nl.source === 'llm' ? `<div class="row" style="margin-bottom:10px">
+      <span class="hint" style="margin:0">只有大模型能认的说法：</span>${NL_LLM_EXAMPLES.map((t, i) =>
+        `<button class="sm" id="nl-lex-${i}">${esc(t)}</button>`).join('')}</div>`
+      : `<div class="hint" style="margin-bottom:10px">上面这些是<b>字面说法</b>，本地词典认得。
+        想让它听懂「像老式电钢那样，但更清脆一点」这种<b>描述</b>，把「解析方式」切成接大模型。</div>`}
+  `;
+}
+
+function nlHelpBlock() {
+  return `<div class="hint" style="font-size:12px;line-height:1.8">
+      能认出来的是五个方向：${NL_AXES.map(([, l, w]) => `<b>${l}</b>（${w}）`).join('、')}。<br>
+      程度词会改变幅度：<span class="mono">一点 / 稍微</span> 是弱改，
+      <span class="mono">很 / 非常</span> 是强改，不说则是中等。
+      说反了也能懂：<span class="mono">不要太亮</span> 会被当成"变暗"。<br>
+      ${S.nl.source === 'llm'
+        ? '现在是<b>接大模型</b>在解析：你这句话会发给你在上面填的那个接口。'
+        : '解析在本机完成，不联网、不花钱。'}</div>`;
+}
+
+function nlResultBlock(intent, r) {
+  const list = r.changes.length
+    ? `<div style="overflow:auto;max-height:200px"><table>
+        <tr><th>改什么</th><th>原值</th><th>新值</th><th>幅度</th></tr>
+        ${r.changes.map(c => `<tr>
+          <td>${esc(c.what)}</td>
+          <td class="mono">${esc(String(c.from))}</td>
+          <td class="mono">→ ${esc(String(c.to))}</td>
+          <td class="mono">${c.delta}</td></tr>`).join('')}
+      </table></div>`
+    : `<div class="hint">这句话<b>没有产生任何改动</b>。</div>`;
+  const warn = r.warnings.length
+    ? `<div class="hint" style="color:var(--warn);margin-top:8px;line-height:1.7">${
+        r.warnings.map(w => '· ' + esc(w)).join('<br>')}</div>`
+    : '';
+  return `
+    <div class="row" style="margin-bottom:6px">
+      <span class="hint" style="margin:0">「${esc(intent.text)}」→</span>${nlAxisLine(intent)}
+      ${nlWhoBadge(intent)}
+    </div>
+    ${nlSayBlock(intent)}
+    ${list}${warn}
+    <div class="row" style="margin-top:10px">
+      <button id="btn-nl-a">试听改后</button>
+      <button class="primary" id="btn-nl-keep"${r.changes.length ? '' : ' disabled'}>留下这个改动</button>
+      <button class="sm" id="btn-nl-again">换一句话</button>
+      <span class="hint" style="margin:0">改动只落在一份副本上；点「留下」之前，原音色一个字节都没动。</span>
+    </div>`;
+}
+
+function nlFailBlock(intent) {
+  const isLLM = intent.source === 'llm';
+  return `
+    <div style="background:var(--warn-bg);border:1px solid #E9CE9A;border-radius:10px;
+        padding:10px 12px;color:var(--warn);font-size:12px;line-height:1.7;margin-bottom:10px">
+      ${isLLM ? '模型说做不到' : '没听懂'}：${esc(intent.reason || '')}${
+        intent.hits && intent.hits.length ? `（只认出了「${esc(intent.hits.join('、'))}」）` : ''}。
+      ${nlSayBlock(intent)}
+      ${isLLM ? '' : '<br>本地词典只认字面词，换成这些试试：'
+        + NL_EXAMPLES.map(t => `<b>${esc(t)}</b>`).join('、') + '。'}
+    </div>
+    <div class="row">
+      <button class="sm" id="btn-nl-again">换一句话</button>
+      ${isLLM || !LLM ? '' : '<span class="hint" style="margin:0">'
+        + '或者把上面的「解析方式」切成<b>接大模型</b> —— 它认的是意思，不是字面词。</span>'}
+    </div>`;
+}
+
+function renderNl() {
+  const host = $('nl-body');
+  if (!host) return;
+  const v = S.sel;
+
+  if (!v) {
+    host.innerHTML = `<div class="hint" style="font-size:12px;line-height:1.8">
+      先在上面 <b>③ 检索</b> 里点一个音色 —— 它就是这次改动的<b>锚点</b>。<br>
+      以现有音色为起点做微调，而不是凭空生成：改动小、看得见、听得出，
+      不满意直接丢掉，原音色不受影响。</div>
+      <div style="height:8px"></div>` + nlHelpBlock();
+    return;
+  }
+
+  const r = S.nl.result, it = S.nl.intent;
+  let body;
+  if (r) body = nlResultBlock(it, r);
+  else if (it && !it.ok) body = nlFailBlock(it) + nlHelpBlock();
+  else body = nlInputBlock() + nlHelpBlock();
+
+  host.innerHTML = nlAnchorLine() + body;
+  bindNl();
+}
+
+function bindNl() {
+  if ($('nl-text')) $('nl-text').oninput = () => { S.nl.text = $('nl-text').value; };
+  NL_EXAMPLES.forEach((t, i) => {
+    if ($('nl-ex-' + i)) $('nl-ex-' + i).onclick = () => nlParse(t);
+  });
+  NL_LLM_EXAMPLES.forEach((t, i) => {
+    if ($('nl-lex-' + i)) $('nl-lex-' + i).onclick = () => nlParse(t);
+  });
+  if ($('btn-nl-parse')) $('btn-nl-parse').onclick = () => nlParse();
+  if ($('btn-nl-again')) $('btn-nl-again').onclick = () => { S.nl.result = null; S.nl.intent = null; renderNl(); };
+  if ($('btn-nl-keep')) $('btn-nl-keep').onclick = nlKeep;
+  if ($('btn-nl-undo')) $('btn-nl-undo').onclick = nlUndo;
+  if ($('btn-nl-sample')) $('btn-nl-sample').onclick = () => { if (S.sel) playVoice(S.sel); };
+  if ($('btn-nl-a')) $('btn-nl-a').onclick = () => { if (S.nl.result) playRendered(S.nl.result.voice); };
+}
+
+/* 传 text 进来就直接用它（点示例说法走这条），不传才去读输入框。
+   为什么必须区分：点示例时输入框里可能还是空的，先写 S.nl.text = t 再进这里
+   读输入框，就会把刚设好的那句话覆盖成空串 —— 表现成"点了示例却提示没听懂"。 */
+async function nlParse(text) {
+  const v = S.sel;
+  if (!v) return;
+  const box = $('nl-text');
+  if (typeof text === 'string') { S.nl.text = text; if (box) box.value = text; }
+  else if (box) S.nl.text = box.value;
+
+  const useLLM = S.nl.source === 'llm' && !!LLM;
+  let intent;
+  try {
+    if (useLLM) {
+      const typed = ($('nl-key') && $('nl-key').value) ? String($('nl-key').value).trim() : '';
+      if (typed && typed !== S.nl.apiKey) { S.nl.apiKey = typed; LLM.saveKey(typed); }
+      S.nl.busy = true;
+      renderNlSettings();
+      intent = await LLM.call({
+        text: S.nl.text, voice: v.d, provider: nlProvider(), model: nlModel(),
+        apiKey: nlCurrentKey(), fetchImpl: nlFetcher(),
+      });
+      S.nl.busy = false;
+    } else {
+      intent = FM1_INTENT.parseLocal(S.nl.text);
+      intent.source = 'local';
+    }
+  } catch (e) {
+    S.nl.busy = false;
+    S.nl.intent = { ok: false, text: S.nl.text, axes: {}, matched: [], hits: [],
+      reason: '解析时出了意外：' + (e && e.message ? e.message : e) };
+    S.nl.result = null;
+    renderNl(); renderNlSettings();
+    return;
+  }
+
+  /* 意图必须是能落地的才继续 —— 落不下去就当成没听懂，
+     绝不让它带着一个半成品状态进到界面里。 */
+  if (intent.ok) {
+    try { S.nl.result = FM1_INTENT.applyIntent(v.d, intent); }
+    catch (e) {
+      intent.ok = false;
+      intent.reason = '这套改动落不到这个音色上：' + (e && e.message ? e.message : e);
+      S.nl.result = null;
+    }
+  } else {
+    S.nl.result = null;
+  }
+  S.nl.intent = intent;
+  renderNl();
+  renderNlSettings();
+}
+
+/* 「留下」= 把这个改动写进音色库里对应的那一槽。
+   写的是内存里的副本，磁盘上的 .syx 文件不会被碰。留一步撤销。 */
+function nlKeep() {
+  const v = S.sel, r = S.nl.result;
+  if (!v || !r) return;
+  const bank = S.banks.find(b => b.id === v.bankId);
+  if (!bank) return;
+  const raw = DX7.encodeVoice(r.voice);
+  const from = v.slot * 128;
+  S.nl.undo = { bankId: bank.id, slot: v.slot, key: v.key,
+    raw: bank.data.slice(from, from + 128) };
+  bank.data.set(raw, from);
+  bank.voices[v.slot].d = DX7.decodeVoice(raw);
+  bank.voices[v.slot].info = DX7.describe(bank.voices[v.slot].d, FM_ENGINE);
+  const key = v.key;
+  S.nl.result = null; S.nl.intent = null;
+  rebuildIndex();
+  renderResults();
+  const nv = S.index.find(x => x.key === key);
+  if (nv) selectVoice(nv, false); else renderNl();
+}
+
+function nlUndo() {
+  const u = S.nl.undo;
+  if (!u) return;
+  const bank = S.banks.find(b => b.id === u.bankId);
+  if (!bank) { S.nl.undo = null; renderNl(); return; }
+  bank.data.set(u.raw, u.slot * 128);
+  bank.voices[u.slot].d = DX7.decodeVoice(u.raw);
+  bank.voices[u.slot].info = DX7.describe(bank.voices[u.slot].d, FM_ENGINE);
+  const key = u.key;
+  S.nl.undo = null;
+  rebuildIndex();
+  renderResults();
+  const nv = S.index.find(x => x.key === key);
+  if (nv) selectVoice(nv, false); else renderNl();
+}
+
+/* ---------------------------------------------------------------- 台账 */
+function renderProv() {
+  const F = window.FM1_FACTORY;
+  const host = $('prov');
+  if (!F || !F.provenance) {
+    host.innerHTML = `<tr><td class="hint">还没有出厂音色的来源台账。<br>
+      台账随 <span class="mono">data/factory.js</span> 一起生成，而那份数据不随仓库分发 ——
+      在本地运行 <span class="mono">tools/fetch_ref.sh</span> 与
+      <span class="mono">python tools/build_assets.py</span> 之后刷新本页即可看到。<br>
+      随附的原创音色库<b>没有</b>台账：它给每个音色配的是一条设计说明，
+      在左边选中任一随附音色就能读到。</td></tr>`;
+    return;
+  }
+  const q = $('prov-q').value.trim().toLowerCase();
+  const rows = F.provenance
+    .map((p, i) => Object.assign({}, p, { slot: i, name: F.names[i] }))
+    .filter(p => !q || (p.name + p.source + p.original + p.yamaha).toLowerCase().includes(q));
+  host.innerHTML =
+    `<tr><th>槽</th><th>FM-1 音色名</th><th>来源文件</th><th>原名</th><th>Yamaha 卡带</th></tr>` +
+    rows.map(p => `<tr>
+      <td class="mono">${p.slot}</td>
+      <td>${esc(p.name)}</td>
+      <td class="mono" style="font-size:11px">${esc(p.source)}</td>
+      <td>${esc(p.original)}</td>
+      <td>${p.yamaha ? `<span class="tag y">${esc(p.yamaha)}</span>` : ''}</td>
+    </tr>`).join('');
+}
+
+/* ---------------------------------------------------------------- 自检 */
+function selfTest() {
+  const lines = [];
+  const say = (s) => lines.push(s);
+  const ok = (cond, msg) => { say(`${cond ? '  PASS' : '  FAIL'}  ${msg}`); return cond; };
+  let allPass = true;
+  const F = window.FM1_FACTORY, ST = window.FM1_STARTER;
+  const log = $('log');
+  // 两个数据源都能自检：出厂音色（如果本地已经建好）与随附的原创音色库。
+  const src = F ? F.banks[0] : (ST && ST.banks ? ST.banks[0] : null);
+  if (!src) {
+    log.textContent = '没有可自检的音色数据。';
+    log.style.color = 'var(--warn)';
+    return;
+  }
+  const bankA = DX7.b64ToBytes(src);
+  const cleanA = DX7.parseBank(bankA);   // 去掉包头与校验和，只留 4096 字节
+  const all = new Uint8Array(128 * 128);
+  if (F) {
+    F.banks.forEach((b64, i) => all.set(DX7.parseBank(DX7.b64ToBytes(b64)), i * DX7.BANK_BYTES));
+  } else {
+    all.set(DX7.parseBank(bankA), 0);
+  }
+  const NV = F ? 128 : 32;    // 出厂音色 4 个 bank；随附音色库 1 个 bank
+
+  say(`数据来源：${F ? 'FM-1 出厂音色（4 个 bank）' : '随附原创音色库（1 个 bank，CC0 1.0）'}`);
+  say('');
+  say('① 解码 → 重建，与原始字节逐字节比对');
+  const rebuilt = DX7.buildBank(all.slice(0, DX7.BANK_BYTES));
+  allPass &= ok(DX7.hex(rebuilt) === DX7.hex(bankA),
+    `重建的 4104 字节与原数据一致（校验和 0x${rebuilt[4102].toString(16)}）`);
+
+  say('');
+  say('② 解码 → 再序列化，往返一致');
+  allPass &= ok(DX7.hex(DX7.buildBank(DX7.parseBank(bankA))) === DX7.hex(bankA),
+    'parse → build 往返得到原始字节');
+
+  say('');
+  say(`③ 全部 ${NV} 个音色的参数合法性审计（偏移量若有错，取值必然越界）`);
+  const stats = {};
+  for (const k in DX7.SPEC) stats[k] = { min: 999, max: -999, over: 0, bad: 0 };
+  const bump = (k, val) => {
+    const st = stats[k];
+    if (val < st.min) st.min = val;
+    if (val > st.max) st.max = val;
+    const spec = DX7.SPEC[k];
+    if (val > spec[1]) st.bad++; else if (val > spec[0]) st.over++;
+  };
+  const names = [];
+  for (let i = 0; i < NV; i++) {
+    const d = DX7.decodeVoice(all.slice(i * 128, i * 128 + 128));
+    names.push(d.name);
+    bump('算法', d.algorithm); bump('反馈', d.feedback); bump('振荡器同步', d.oscKeySync);
+    bump('移调', d.transpose); bump('LFO 波形', d.lfoWave); bump('LFO 同步', d.lfoSync);
+    bump('LFO 音高调制灵敏度', d.lfoPitchModSens);
+    d.pitchEgR.concat(d.pitchEgL).forEach(x => bump('音高包络 rate / level', x));
+    for (const o of d.ops) {
+      o.egR.concat(o.egL).forEach(x => bump('算子·包络 R / L', x));
+      bump('算子·断点', o.breakPoint);
+      bump('算子·左右深度', o.leftDepth); bump('算子·左右深度', o.rightDepth);
+      bump('算子·左右曲线', o.leftCurve); bump('算子·左右曲线', o.rightCurve);
+      bump('算子·失谐', o.detune); bump('算子·速率缩放', o.rateScale);
+      bump('算子·力度灵敏度', o.keyVelSens); bump('算子·振幅调制灵敏度', o.ampModSens);
+      bump('算子·输出电平', o.outputLevel); bump('算子·振荡模式', o.oscMode);
+      bump('算子·粗调', o.freqCoarse); bump('算子·微调', o.freqFine);
+    }
+  }
+  let totalBad = 0, totalOver = 0;
+  for (const k in stats) {
+    const st = stats[k];
+    totalBad += st.bad; totalOver += st.over;
+    say(`  ${st.bad ? 'FAIL' : (st.over ? 'NOTE' : 'PASS')}  ${k.padEnd(20, '　')} ` +
+      `实测 ${String(st.min).padStart(3)}–${String(st.max).padStart(3)}   超格式 ${st.bad}   超文档 ${st.over}`);
+  }
+  allPass &= ok(totalBad === 0, `超出 packed 格式字节范围的取值：${totalBad} 个`);
+  if (totalOver) {
+    say('');
+    say(`  说明：另有 ${totalOver} 个取值超出 DX7 面板的可见上限，但仍在字段字节的容量之内。`);
+    say('  · 失谐：面板 −7…+7，而 4 位字段可达 +8 —— 槽 22、35、84 各有一个算子取到 +8');
+    say('  · 包络速率：面板 0–99，整字节可达 127 —— 槽 35 的 OP4 EG.R3、槽 109 的 OP2 EG.L3 为 0x7F');
+    say('  · 频率微调：面板 0–99，整字节可达 127 —— 槽 115 / 119 / 123 的 OP2 为 0x7F');
+    say('  这些是源数据本身如此，不是解析错位。判据很硬：同一个算子的其余 16 个字节');
+    say('  全部落在合法区间 —— 如果偏移量错了，不可能只错一个字段。');
+  }
+  say('');
+  if (F) {
+    allPass &= ok(names[0] === 'PIANO 1' && names[127] === 'WHAT IF',
+      `名字字段落在第 118 字节：首 ${JSON.stringify(names[0])} / 末 ${JSON.stringify(names[127])}`);
+    const v0 = DX7.decodeVoice(all.slice(0, 128));
+    allPass &= ok(v0.algorithm === 4 && v0.feedback === 6,
+      `PIANO 1 的算法 = ${v0.algorithm}（0 基，即面板算法 5），反馈 = ${v0.feedback}`);
+  } else {
+    allPass &= ok(names[0] === ST.names[0],
+      `名字字段落在第 118 字节：首槽 = ${JSON.stringify(names[0])}，与 starter.js 的记录一致`);
+  }
+
+  say('');
+  say('④ 试听引擎在这些音色上跑一遍');
+  let engineOk = true;
+  const silent = [];
+  for (let i = 0; i < NV; i++) {
+    const d = DX7.decodeVoice(all.slice(i * 128, i * 128 + 128));
+    const buf = FM_ENGINE.render(d, { sampleRate: SR, duration: 0.6, gate: 0.4, note: 48 });
+    let bad = 0, peak = 0;
+    for (const x of buf) { if (!Number.isFinite(x)) bad++; peak = Math.max(peak, Math.abs(x)); }
+    if (bad > 0) { engineOk = false; say(`  FAIL  槽 ${i} ${d.name} 出现 ${bad} 个非法采样值`); }
+    if (peak < 1e-4) silent.push(`${i}:${d.name.trim()}`);
+  }
+  allPass &= ok(engineOk, `${NV} 个音色全部渲染成功，输出均为有限值`);
+  say(`  ${silent.length ? 'NOTE' : 'PASS'}  ${silent.length
+    ? '以下音色渲染近乎静音（多为纯打击类，属正常）：' + silent.slice(0, 8).join(', ')
+    : '没有音色渲染成静音'}`);
+
+  /* 大模型接入层里不需要联网的那几件事。提示词、解析、锚点可调性
+     全是纯函数，能在这里当场验；真正的请求留给「测试连接」按钮。 */
+  say('');
+  say('⑤ 大模型接入层（这一节不联网）');
+  const L = window.FM1_LLM;
+  allPass = ok(!!L, '接入层已载入（engine/llm.js）') && allPass;
+  if (L) {
+    const good = L.parseModelOutput('{"ok":true,"axes":{"bright":0.5}}');
+    allPass = ok(good.ok && good.axes.bright === 0.5, '能把模型的回答解成意图') && allPass;
+    const junk = L.parseModelOutput('这个音色挺好的，不用改。');
+    allPass = ok(junk.ok === false && junk.malformed === true,
+      '模型答非所问时判定为没接住，可以退回本地词典') && allPass;
+    const shifted = L.parseModelOutput('{"axes":{"bright":80}}');
+    allPass = ok(shifted.ok && Math.abs(shifted.axes.bright - 0.8) < 1e-9,
+      '模型按 0–100 给分时能换算回来，而不是夹掉') && allPass;
+    const sample = DX7.decodeVoice(cleanA.slice(0, 128));
+    const can = L.adjustable(sample);
+    allPass = ok(typeof can.bright === 'boolean', '能算出锚点音色上哪些轴真的可调') && allPass;
+    const msgs = L.buildMessages('亮一点', sample);
+    allPass = ok(msgs.length === 2 && msgs[1].content.indexOf('亮一点') >= 0,
+      '提示词拼得出来，用户那句话在里面') && allPass;
+    allPass = ok(msgs[1].content.indexOf('可调的轴') >= 0,
+      '提示词里写明了这台音色哪些轴能调') && allPass;
+    const landed = FM1_INTENT.applyIntent(sample, good);
+    allPass = ok(landed.changes.length > 0,
+      '模型给的意图能直接落到具体参数上') && allPass;
+  }
+
+  say('');
+  say(allPass ? '结论：全部通过。这个解码器与试听引擎可以信任。' : '结论：存在失败项，需要复核。');
+  log.textContent = lines.join('\n');
+  log.style.color = allPass ? 'var(--ok)' : 'var(--bad)';
+}
+
+/* ---------------------------------------------------------------- 绑定 */
+(function bind() {
+  const opts = [];
+  for (let m = 24; m <= 84; m++) opts.push(`<option value="${m}">${noteName(m)} (${m})</option>`);
+  $('note').innerHTML = opts.join('');
+  $('note').value = '48';
+
+  /* 先载入随仓库分发的原创音色库：不需要网络、不需要构建，双击打开就一定有
+     东西可用。这是"点开就能用"的兜底 —— 出厂音色那条路可能因为断网、
+     或没跑过构建脚本而暂时走不通。 */
+  const ST = window.FM1_STARTER;
+  if (ST && ST.banks && ST.banks.length) {
+    addBank(DX7.parseBank(DX7.b64ToBytes(ST.banks[0])), '随附音色',
+      '本项目原创设计 · CC0 1.0', 'starter', 0);
+  }
+
+  renderFactoryRow();
+  $('factory-row').onclick = (e) => {
+    if (e.target.id === 'btn-upstream') { fetchUpstreamFactory(e.target); return; }
+    const b = e.target.dataset.bank;
+    const F = window.FM1_FACTORY;
+    if (b === undefined || !F) return;
+    const idxs = b === 'all' ? [0, 1, 2, 3] : [Number(b)];
+    for (const i of idxs) {
+      const label = '出厂 Bank ' + String.fromCharCode(65 + i);
+      if (S.banks.some(x => x.label === label)) continue;
+      addBank(DX7.parseBank(DX7.b64ToBytes(F.banks[i])), label,
+        'M-VAVE FM-1 出厂音色（还原自官方工具抓包）', 'factory', i * 32);
+    }
+    rebuildIndex();
+    renderFilterOptions();
+    renderResults();
+    renderProv();
+  };
+
+  const drop = $('drop'), file = $('file');
+  $('btn-file').onclick = () => file.click();
+  file.onchange = () => { loadFiles(file.files); file.value = ''; };
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); loadFiles(e.dataTransfer.files); };
+
+  function loadFiles(files) {
+    if (!files || !files.length) return;
+    const list = [...files];
+    let done = 0;
+    const failed = [];
+    for (const f of list) {
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          addBank(DX7.parseBank(new Uint8Array(r.result)), f.name, f.name, 'user', 0);
+        } catch (err) {
+          failed.push(`${f.name}：${err.message}`);
+        }
+        if (++done === list.length && failed.length) alert('有文件无法解析：\n' + failed.join('\n'));
+      };
+      r.onerror = () => { if (++done === list.length && failed.length) alert('有文件无法解析：\n' + failed.join('\n')); };
+      r.readAsArrayBuffer(f);
+    }
+  }
+
+  $('q').oninput = () => { S.query = $('q').value; renderResults(); };
+  $('f-algo').onchange = () => { S.algo = Number($('f-algo').value); renderResults(); };
+  $('f-bank').onchange = () => { S.bank = $('f-bank').value; renderResults(); };
+  $('f-sort').onchange = () => { S.sort = $('f-sort').value; renderResults(); };
+  $('btn-clear').onclick = () => {
+    $('q').value = ''; $('f-algo').value = '-1'; $('f-bank').value = 'all'; $('f-sort').value = 'slot';
+    S.query = ''; S.algo = -1; S.bank = 'all'; S.sort = 'slot';
+    renderResults();
+  };
+  $('autoplay').onchange = () => { S.autoplay = $('autoplay').checked; };
+  $('note').onchange = () => { S.note = Number($('note').value); if (S.sel) playVoice(S.sel); };
+
+  $('btn-play').onclick = () => { if (S.sel) playVoice(S.sel); };
+  $('btn-close').onclick = () => { $('detail').style.display = 'none'; S.sel = null; renderResults(); };
+  $('btn-wav').onclick = () => {
+    if (!S.lastBuf) return;
+    const nm = (S.sel ? S.sel.d.name.trim().replace(/[^\w-]+/g, '_') : 'voice');
+    download(FM_ENGINE.encodeWav(S.lastBuf, SR), `${nm}_${noteName(S.note)}.wav`);
+  };
+  $('btn-rename').onclick = () => {
+    const key = $('rename').dataset.key;
+    const v = S.index.find(x => x.key === key);
+    if (!v) return;
+    const bank = S.banks.find(b => b.id === v.bankId);
+    DX7.writeName(bank.data, v.slot, $('rename').value);
+    const d = DX7.decodeVoice(bank.data.slice(v.slot * 128, v.slot * 128 + 128));
+    bank.voices[v.slot] = { d: d, info: DX7.describe(d, FM_ENGINE) };
+    v.d = d; v.info = bank.voices[v.slot].info;
+    renderResults();
+    showDetail(v);
+  };
+  $('btn-export-sel').onclick = () => {
+    const list = filtered().slice(0, 32);
+    if (list.length === 0) return;
+    const out = new Uint8Array(DX7.BANK_BYTES);
+    list.forEach((v, i) => out.set(v.d.raw, i * 128));
+    download(DX7.buildBank(out), `fm1_selection_${list.length}.syx`);
+  };
+
+  $('btn-audit').onclick = selfTest;
+  $('prov-q').oninput = renderProv;
+
+  /* 恢复上次选的解析方式和 Key。Key 只从本机读，读不到就空着。 */
+  if (LLM) {
+    const cfg = LLM.loadConfig();
+    if (cfg && cfg.providerId && LLM.providerById(cfg.providerId).id === cfg.providerId)
+      S.nl.providerId = cfg.providerId;
+    if (cfg && cfg.source === 'llm') S.nl.source = 'llm';
+    S.nl.apiKey = LLM.loadKey();
+  }
+
+  renderProv();
+  renderNlSettings();
+  renderResults();
+  renderNl();
+  selfTest();
+})();
+</script>
+</body>
+</html>
