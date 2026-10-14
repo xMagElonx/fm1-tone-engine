@@ -54,10 +54,25 @@ talks to the provider straight from the page.** See [`LLM.md`](LLM.md).
 ## Why it is not just another editor
 
 The FM-1 scene already has an excellent librarian (fm1-editor.com) and 40+ alternative
-firmwares. This project deliberately does **not** compete on either. It occupies one narrow
-slot nothing else covers:
+firmwares. This project deliberately does **not** compete on either.
 
-**Editing a DX7-compatible voice by talking to it, with no hardware and no install.**
+It is also **not the first thing in this scene to put a language model in the loop.** In
+October 2026, `hunterxiong2026/fm1-felucca-editor-2026` (MIT) shipped an LLM/agent skill
+that drives an FM-1 running **Felucca** firmware over SysEx — for multi-track arranging and
+for editing Felucca's own parameters. Naming it here on purpose: the difference is the whole
+point, and the honest version of the claim is narrower than "AI edits an FM-1".
+
+| | Felucca Editor Skill | This project |
+|---|---|---|
+| Firmware | Felucca — a community replacement; flashing it carries real risk | **stock V15**, as it left the factory |
+| Protocol | Felucca's editor protocol (~111 track parameters, 27 global) | **standard DX7** — what the device already speaks |
+| Needs | a real FM-1, USB, Windows, Python, a free MIDI port | **none of it** |
+| What the model emits | Felucca parameter values | five axes and an intensity; a tested mapping computes the bytes |
+
+So the slot is narrower than "AI edits an FM-1":
+
+**Editing a stock, unmodified FM-1's DX7 voices by talking to it — in a browser tab,
+with no hardware, no install, and no firmware flashing.**
 
 Two consequences that matter:
 

@@ -203,8 +203,12 @@ locally.
 
 ### Three things to know before you write
 
-- **The FM-1 receives SysEx but never sends it.** You cannot read the device
-  back. There is no "back up the device" — only "back up what you already have".
+- **There is no standard path to reading the device back.** The FM-1 answers no
+  standard DX7 read request, so with standard tooling there is no "back up the
+  device" — only "back up what you already have".
+  *(Corrected 2026-10-15: one undocumented private command does return the
+  current voice, one voice at a time, in a format that still needs parsing. This
+  project neither implements nor has verified it — `MIDI-WRITE.md` §5.5.)*
 - **The onboard factory reset does not restore the factory set.** It restores
   whatever was last imported. It is not a safety net for a bad write.
 - **A standard bank dump carries no target address and gets no acknowledgement.**
