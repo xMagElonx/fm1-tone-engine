@@ -25,6 +25,8 @@
 //
 // 用法：
 //   node tools/tablecheck.mjs                    用随附的 32 个音色 + ref/packed128.bin（有就用）
+//                                                活性类断言需要出厂 128 个音色，语料不足时
+//                                                大声 SKIP 并说明怎么补（bash tools/fetch_ref.sh）
 //   node tools/tablecheck.mjs <bank.syx|*.bin>   换成你自己的字节（这才是重点）
 //   node tools/tablecheck.mjs --tables           只打印内置的几张候选表
 import { readFileSync, existsSync } from 'node:fs';
@@ -316,6 +318,12 @@ check(corpora.some(c => c.voices.length >= 32), '至少有一份够用的语料�
 
 const main = corpora.slice().sort((a, b) => b.voices.length - a.voices.length)[0];
 const V = main.voices;
+/* 活性类尺子（③ 的 bit3、④ 的两张表判定）是按出厂 128 个音色校准的：
+   全部 128 个里振荡器同步 87 个为 1，才量得出来；随附的 32 个 starter
+   里它恰好全 0，样本覆盖不够，量了也是噪声。语料不足时这些断言
+   大声 SKIP 并说明怎么补 —— 不悄悄给个通过，也不把它算成失败。 */
+const FULL = V.length >= 128;
+const HOW_REF = '做法：bash tools/fetch_ref.sh 下载 ref/packed128.bin（出厂 128 个音色），然后重跑本命令。';
 console.log(`\n  主语料：${main.label}，${V.length} 个音色`);
 
 h2('② 尺子一：音色名窗口（不需要任何人告诉我们名字在哪）');
@@ -339,9 +347,13 @@ const per31 = periodicNarrow(maxByByte, 31);
   check(per15.step === OPBLK,
     `max ≤ 15 的字节以步长 ${per15.step} 等距出现，正好等于算子块大小 ${OPBLK}`,
     `成员：${per15.members.join(', ')}`);
-  check(per15.members.includes(96),
-    'byte 96 落在这个周期序列里 → 它属于算子块内部，不是全局区',
-    '反面样本 A 把算法号放在 byte 96；它出现在这里，说明那个位置属于算子 6');
+  if (FULL) {
+    check(per15.members.includes(96),
+      'byte 96 落在这个周期序列里 → 它属于算子块内部，不是全局区',
+      '反面样本 A 把算法号放在 byte 96；它出现在这里，说明那个位置属于算子 6');
+  } else {
+    skip('byte 96 是否落在算子周期序列里 —— 需要足够多样的语料（≥128 音色）', HOW_REF);
+  }
   check(maxByByte[110] <= 31 && per31.narrow.includes(110),
     `byte 110 的 max = ${maxByByte[110]} ≤ 31，是 5 位容器，且不在任何 step-17 序列里 → 与"算法在全局区"相容`);
   check(maxByByte[96] <= 15,
@@ -354,7 +366,12 @@ for (const v of V) { if ((v[111] >> 3) & 1) bit3++; if ((v[111] >> 4) & 1) bit4+
 {
   check(maxByByte[111] <= 15,
     `byte 111 的 max = ${maxByByte[111]} ≤ 15 —— 它是一个 4 位容器（3 位反馈 + 1 位同步）`);
-  check(bit3 > 0, `byte 111 的 bit3 在 ${bit3} / ${V.length} 个音色里为 1 —— 这个位是活的`);
+  if (FULL) {
+    check(bit3 > 0, `byte 111 的 bit3 在 ${bit3} / ${V.length} 个音色里为 1 —— 这个位是活的`);
+  } else {
+    skip(`byte 111 的 bit3 活性 —— 本语料 ${V.length} 个音色里它恰好全 0，样本覆盖不够`,
+      'starter 的 32 个音色振荡器同步全部是关的，量不出活性。' + HOW_REF);
+  }
   check(bit4 === 0, `byte 111 的 bit4 在 ${bit4} / ${V.length} 个音色里为 1 —— 这批数据里它是死的`,
     '所以"把振荡器同步读在 bit4"会对整批音色报同一个值，而真实数据里是有开的');
 }
@@ -386,8 +403,12 @@ for (const t of TABLES) {
   check(good.overlapped.length === 0,
     '[正例] 本项目的表：没有任何一个位被两条声明占用 —— 尺子没有乱开枪',
     good.overlapped.length ? brief(good.overlapped.map(o => o.ref + '(' + o.by.join(' + ') + ')')) : '');
-  check(good.deadBits.length === 0,
-    '[正例] 本项目的表：声明的位字段全部是活的，没有"声明了却没人读"的位');
+  if (FULL) {
+    check(good.deadBits.length === 0,
+      '[正例] 本项目的表：声明的位字段全部是活的，没有"声明了却没人读"的位');
+  } else {
+    skip('[正例] 本项目的表：声明的位字段全部是活的 —— 需要 ≥128 音色的语料', HOW_REF);
+  }
   const goodWorst = Math.max(0, ...good.rangeFails.map(x => x.over));
   check(goodWorst <= Math.ceil(V.length * 0.05),
     `[正例] 本项目的表的区间越界只发生在极少数音色（最多 ${goodWorst}/${V.length}）`
@@ -417,8 +438,13 @@ for (const t of TABLES) {
     '同一把尺子：正例零重叠、反面样本多处重叠 —— 它能区分这两者');
 
   const b4 = results.get(TABLE_BIT4.id);
-  check(b4.deadBits.length >= 1,
-    '[反面样本 B] 把振荡器同步读在 bit4 的写法，被判为死位 —— 尺子认得这个历史 bug');
+  if (FULL) {
+    check(b4.deadBits.length >= 1,
+      '[反面样本 B] 把振荡器同步读在 bit4 的写法，被判为死位 —— 尺子认得这个历史 bug');
+  } else {
+    skip('[反面样本 B] bit4 变体被判死位 —— 需要 ≥128 音色的语料',
+      'starter 的 32 个音色里 bit3 和 bit4 恰好都全 0，尺子无从区分这两张表。' + HOW_REF);
+  }
 }
 
 /* ================================================================ 结论 */
@@ -427,6 +453,7 @@ console.log(`PASS ${pass}   FAIL ${fails}   SKIP ${skips}`);
 if (fails === 0) {
   console.log('结论：内置的每张候选表都得到了可复现的判定。');
   console.log('      正例通过全部尺子，两张反面样本被点到具体的字节与位。');
+  if (skips) console.log(`      另有 ${skips} 项因语料不足而跳过（需要出厂 128 个音色，见上方 SKIP 的说明）。`);
   console.log('      要用它判你自己的表：照着上面的 fields 写法把你的表声明一遍即可。');
 } else {
   console.log(`${fails} 项失败 —— 先查尺子本身，再看被测的表。`);

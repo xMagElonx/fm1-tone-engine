@@ -206,6 +206,8 @@ node   tools/tablecheck.mjs       # 9. are the circulated layout tables right? (
 ```
 
 All nine exit 0, **482 assertions total** (26 + 28 + 30 + 57 + 33 + 109 + 157 + 23 + 19), reproducible.
+(The last figure for tablecheck assumes the factory bank is present; on the bundled 32 voices
+its four liveness assertions print `SKIP` with instructions instead.)
 
 **They also all exit 0 on a fresh clone.** The parts that need factory data print `SKIP` and
 say how to supply it — they neither crash nor quietly pass. That is deliberate: a public
