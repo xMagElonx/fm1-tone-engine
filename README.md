@@ -139,6 +139,15 @@ writing a DX7 importer, it will tell you which of your bytes disagree with the
 format — and the same document says plainly which parts of the format are still
 not known.
 
+`tools/layout.mjs` checks *your bytes* against *this project's table*. The other
+question — "is the table I copied from somewhere right?" — is
+[`tools/tablecheck.mjs`](tools/tablecheck.mjs) and
+[`LAYOUT-CROSSCHECK.md`](LAYOUT-CROSSCHECK.md). Four rulers that need no
+authority: the name field finds itself (exactly one printable window), the
+operator block size measures itself (step 17), a bit that is never set is not a
+parameter, and no bit may be claimed twice. The table that puts the algorithm at
+byte 96 fails all four.
+
 ---
 
 ## Licensing: the "can I ship this?" question, actually answered
@@ -193,9 +202,10 @@ node   tools/intent_test.mjs     # 5. plain-language layer: is the direction rig
 node   tools/llm_test.mjs        # 6. LLM layer: malformed replies, failure fallback, no key leakage
 node   tools/smoke.mjs           # 7. page end-to-end, five scenarios
 node   tools/layout.mjs          # 8. voice-data layout audit (bit level; point it at any bank)
+node   tools/tablecheck.mjs       # 9. are the circulated layout tables right? (measure, don't trust)
 ```
 
-All eight exit 0, **463 assertions total** (26 + 28 + 30 + 57 + 33 + 109 + 157 + 23), reproducible.
+All nine exit 0, **482 assertions total** (26 + 28 + 30 + 57 + 33 + 109 + 157 + 23 + 19), reproducible.
 
 **They also all exit 0 on a fresh clone.** The parts that need factory data print `SKIP` and
 say how to supply it — they neither crash nor quietly pass. That is deliberate: a public
@@ -241,6 +251,7 @@ MIDI-WRITE.md             writing to the device: why standard bank dump, and wha
 NATURAL-LANGUAGE.md       the plain-language layer: structure, measured numbers, three measurement lessons
 LLM.md                    LLM integration: why no server, why the model can't break a voice, error handling
 VOICE-DATA.md             the packed voice, byte by byte — the layout, its unused bits, the write path
+LAYOUT-CROSSCHECK.md      which circulated DX7 layout table is right — decided by measurement
 SHOWCASE.md               the project on one screen: what it does, how it is proven, what it caught
 
 starter/README.md         bundled library notes + design table for all 32 voices (script-generated)
@@ -262,6 +273,7 @@ tools/intent_test.mjs     5. intent audit (direction correctness measured, never
 tools/llm_test.mjs        6. LLM audit (fake fetch throughout; no key, no network)
 tools/smoke.mjs           7. page end-to-end (five scenarios)
 tools/layout.mjs          8. voice-data layout audit: bit-level attribution, round-trip, ranges
+tools/tablecheck.mjs      9. cross-check a layout table against real bytes: range, liveness, overlap
 tools/serve.mjs           local static server (the way out when file:// can't get MIDI permission)
 tools/serve.cmd           Windows double-click version — no typing commands
 tools/render_demo.mjs     render audition audio for the factory voices

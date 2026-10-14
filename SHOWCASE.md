@@ -45,9 +45,10 @@ node tools/intent_test.mjs     # 5. plain language: is the direction right?     
 node tools/llm_test.mjs        # 6. model layer: bad replies, fallback, no key leak (109)
 node tools/smoke.mjs           # 7. the page end to end, five scenarios          (157)
 node tools/layout.mjs          # 8. the byte layout, bit by bit                   (23)
+node tools/tablecheck.mjs      # 9. are the circulated layout tables right?       (19)
 ```
 
-**Eight commands, 463 assertions, all exit 0** — and all exit 0 on a fresh `git clone` too,
+**Nine commands, 482 assertions, all exit 0** — and all exit 0 on a fresh `git clone` too,
 where the parts that need factory data print `SKIP` and say how to supply it rather than
 crashing or quietly passing.
 
@@ -109,13 +110,16 @@ value :  0  2  3  4  5  6  7  8 10 12 13 14 15
 count :  5  1  1  5  4  6 19 10  2  3  8 13 51
 ```
 
-Every value ≤ 15. Bit 4 is not "usually zero" — it **cannot** be anything else. So any
-implementation reading oscillator sync from bit 4 reports "off" for all 128 voices, and no
-amount of testing on real voices would ever reveal it. That is not an anecdote; it is a proof,
-and it is why this project works backwards from real bytes instead of coding against a table.
+Every value ≤ 15. Bit 4 is set in **0** of the 128 voices; bit 3 is set in **87**. So an
+implementation reading oscillator sync from bit 4 reports "off" for the whole factory set, and
+no amount of testing on real voices would ever reveal it — the reader is not wrong about the
+data, it is wrong about which bit *is* the data. That is not an anecdote; it is a measurement.
 
 By-product, same shape: a widely circulated DX7 table puts the algorithm number at **byte 96**.
-Measured on these 128 voices, it is **byte 110** (see `VOICE-DATA.md` §4).
+Measured on these 128 voices it is **byte 110**, and byte 96 turns out to be the sixth
+operator's curve byte — it sits in the same step-17 series as the other five. Which table is
+right, decided by measurement rather than authority, is
+[`LAYOUT-CROSSCHECK.md`](LAYOUT-CROSSCHECK.md).
 
 ---
 
@@ -153,6 +157,7 @@ Measured on these 128 voices, it is **byte 110** (see `VOICE-DATA.md` §4).
 |---|---|
 | [`README.md`](README.md) | the full tour, including the thirteen real problems with their traces |
 | [`VOICE-DATA.md`](VOICE-DATA.md) | the packed voice byte by byte: the layout, the unused bits, the write path |
+| [`LAYOUT-CROSSCHECK.md`](LAYOUT-CROSSCHECK.md) | which circulated DX7 layout table is right — four rulers that need no authority |
 | [`LICENSE-AUDIT.md`](LICENSE-AUDIT.md) | what this repository may and may not ship, and why |
 | [`MIDI-WRITE.md`](MIDI-WRITE.md) | why a standard bank dump, what the device does, and what is unverified |
 | [`NATURAL-LANGUAGE.md`](NATURAL-LANGUAGE.md) | the plain-language layer: structure, measured numbers, three measurement lessons |

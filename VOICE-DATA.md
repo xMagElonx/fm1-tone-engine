@@ -109,8 +109,9 @@ check disagreed with us, and the disagreement turned out to be right.
 
 It was written as bit 4. Every real value of byte 111 is ≤ 15, so bit 4 is
 always zero — which means the parameter read as "off" for every voice, and the
-UI showed "off" for every voice, and **16 of the 128 factory voices have it
-on**. Format valid. Checksum correct. Rendering silent about it.
+UI showed "off" for every voice, and **87 of the 128 factory voices have it
+on** — bit 4 is set in none of the 128, bit 3 in 87 of them. Format valid.
+Checksum correct. Rendering silent about it.
 
 What caught it was a **pack → unpack round-trip assertion**: 127 of the 128
 bytes came back identical and only byte 111 disagreed. One disagreeing byte,
@@ -134,6 +135,13 @@ Some circulated DX7 parameter tables put the algorithm number at byte 96. In the
 packed format used by bulk dumps, measured on 128 captured voices, it is **byte
 110**. If your table disagrees, §5 settles it in about a second — which is a
 better use of your time than trusting either table.
+
+Two other layouts are real, and they are where the *other* numbers come from: the
+unpacked format (169 bytes, 23 per operator) puts the algorithm at 146, and the
+MIDI parameter-change address puts it at 134. Neither is 96.
+
+Which circulated table is right is settled by measurement rather than authority;
+the measurements are written up in [`LAYOUT-CROSSCHECK.md`](LAYOUT-CROSSCHECK.md).
 
 ---
 

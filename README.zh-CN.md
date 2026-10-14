@@ -109,6 +109,13 @@ node tools/layout.mjs your-bank.syx
 **用这个工具不需要本项目、不需要它的数据、也不需要一台 FM-1。** 如果你在写 DX7 导入器，
 它会告诉你哪些字节跟格式对不上；同一份文档也照实说了格式里还有哪些部分至今未知。
 
+`tools/layout.mjs` 判的是「你的字节符不符合这张表」。另一个问题 ——
+「我照抄的那张表本身对不对」—— 归 [`tools/tablecheck.mjs`](tools/tablecheck.mjs) 和
+[`LAYOUT-CROSSCHECK.md`](LAYOUT-CROSSCHECK.md)。四把不需要权威的尺子：
+音色名字段自己暴露位置（全可打印的窗口只有一个）、算子块大小自己量得出来（步长 17）、
+从来没为 1 过的位不是参数、同一个位不许被两条声明占用。那张把算法号放在 byte 96 的表，
+四把尺子一条都过不了。
+
 ---
 
 ## 授权：把"能不能发"这件事查清楚了
@@ -160,9 +167,10 @@ node   tools/intent_test.mjs     # ⑤ 自然语言层：改得对不对，渲�
 node   tools/llm_test.mjs        # ⑥ 大模型接入层：畸形回答、失败降级、不泄漏 Key
 node   tools/smoke.mjs           # ⑦ 页面端到端，五个场景
 node   tools/layout.mjs          # ⑧ 音色字节布局审计（位级，可指向任何一份 bank）
+node   tools/tablecheck.mjs      # ⑨ 流传的那几张布局表对不对？（量出来，别信权威）
 ```
 
-八条命令全部退出 0，共 **463 项断言**（26 + 28 + 30 + 57 + 33 + 109 + 157 + 23），可复现。
+九条命令全部退出 0，共 **482 项断言**（26 + 28 + 30 + 57 + 33 + 109 + 157 + 23 + 19），可复现。
 
 **全新 clone 上直接跑也全部退出 0。** 需要出厂音色的那几项会打印 `SKIP` 并说明
 怎么把数据补上 —— 不会崩，也不会悄悄给个通过。这是刻意的：一个公开仓库的测试包
@@ -204,6 +212,7 @@ MIDI-WRITE.md             写入设备：为什么用标准 bank dump，以及�
 NATURAL-LANGUAGE.md       自然语言层：结构、实测数字、测量方法上的三次教训
 LLM.md                    接大模型：为什么不用服务器、为什么模型坏不了音色、错误处理
 VOICE-DATA.md             packed 音色的逐字节布局、格式里没用的位、写入设备那条路（英文）
+LAYOUT-CROSSCHECK.md      流传的那几张 DX7 布局表谁对谁错 —— 用实测判，不用权威（英文）
 SHOWCASE.md               一屏看懂整个项目：做过什么、怎么证明是对的、抓到过什么（英文）
 
 starter/README.md         随附音色库说明 + 32 个音色的设计表（由脚本生成）
@@ -225,6 +234,7 @@ tools/intent_test.mjs     ⑤ 意图层审计（方向正确性全靠实测，�
 tools/llm_test.mjs        ⑥ 大模型接入层审计（全程假 fetch，不需要 Key、不联网）
 tools/smoke.mjs           ⑦ 页面端到端测试（五个场景：有/无出厂数据、接设备、改音色、接模型）
 tools/layout.mjs          ⑧ 字节布局审计：位级归属、往返、区间；也可指向任意一份 bank
+tools/tablecheck.mjs      ⑨ 拿真实字节判一张布局表：区间、位活性、声明重叠
 tools/serve.mjs           本机静态服务器（file:// 拿不到 MIDI 权限时的出路）
 tools/serve.cmd           Windows 双击版 —— 不用敲命令
 tools/render_demo.mjs     渲染出厂音色的试听音频
