@@ -369,9 +369,19 @@ its implementation later would be a licensing question.
     outright. **An assertion's value is sometimes not the feature it verifies but the old
     ground it happens to illuminate.**
 
-One by-product: a widely circulated DX7 byte-layout table puts the algorithm number at byte
-96. **Measured, it is byte 110.** Which is why this project works backwards from real bytes
-instead of coding against second-hand tables.
+12. **A copy is not a clone.** Every earlier "it also runs on a fresh clone" check had been made
+    by copying the directory with `tar` — which preserves line endings, so it was only agreeing
+    with this machine and proved nothing about a real clone. The first actual `git clone`
+    crashed `tools/smoke.mjs` before a single assertion ran: Git for Windows writes
+    `core.autocrlf=true` into the **system** config, a repo-local setting does not travel with a
+    clone, so `index.html` checked out with CRLF and the test's `/<script>\n/` never matched.
+    A `.gitattributes` containing `* text=auto eol=lf` overrides anyone's local configuration.
+    **The environment that is easiest to reproduce is the one most likely to fool you.**
+    (Same root cause as problem 5, entering through a different door.)
+
+One by-product: a widely circulated DX7 byte-layout table puts the algorithm number at
+byte 96. **Measured, it is byte 110.** Which is why this project works backwards from real
+bytes instead of coding against second-hand tables.
 
 ---
 
