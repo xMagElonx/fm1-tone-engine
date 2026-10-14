@@ -1,0 +1,17 @@
+# Keep LF in the working tree on every platform.
+#
+# This project compares file contents byte-for-byte: the smoke test matches
+# /<script>\n/ inside index.html, so a CRLF checkout breaks the test suite
+# outright -- and it breaks it before any assertion can explain why.
+#
+# Git for Windows ships with core.autocrlf=true in the SYSTEM config, which a
+# repository-local setting cannot override for anyone who clones it. A
+# .gitattributes file can, and does.
+* text=auto eol=lf
+
+# Real binaries -- never convert, never diff.
+*.wav  binary
+*.syx  binary
+*.bin  binary
+*.png  binary
+*.ico  binary
