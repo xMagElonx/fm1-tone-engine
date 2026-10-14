@@ -16,6 +16,9 @@
        116      bit6-4 = 音高调制灵敏度 | bit3-1 = 波形 0-5 | bit0 = LFO 同步
        117      移调 0-48
        118..127 音色名 10 个 ASCII 字符
+
+   同一份布局另有一份**数据形式**：本文件下面的 DX7.LAYOUT（见 fld 那段注释）。
+   工具 tools/layout.mjs 以那份数据为准来挑实现的错，两处要一起改。
    ========================================================================= */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -42,6 +45,54 @@
     '算子·力度灵敏度': [7, 7], '算子·振幅调制灵敏度': [3, 3],
     '算子·输出电平': [99, 127], '算子·振荡模式': [1, 1],
     '算子·粗调': [31, 31], '算子·微调': [99, 127],
+  };
+
+  /* ---------------------------------------------------------------- 字节布局
+     上面那段注释写的是布局，这里是同一份布局的**数据形式**。
+     为什么要写成数据：布局一旦只活在注释和偏移常量里，就没有任何机制阻止它
+     跟实现分家 —— 而本项目恰好栽过两次在这上面：
+       · 振荡器同步写在 bit4，真实是 bit3（bit4 恒为 0，于是这个参数对全部音色
+         都读成"关"，而真正有 16 个音色是"开"）
+       · 包络 8 个值按 (R1 L1 R2 L2 …) 交错读，真实是「先 4 个 R，再 4 个 L」
+     两次都是格式全合法、校验和对、渲染也不报错。所以布局必须能被机器检查。
+
+     tools/layout.mjs 对这张表做四件事：
+       ① 断言 128 个字节的 bit0–6 每个最多被一个字段占用（不允许重叠）
+       ② 逐条列出**没有被任何字段占用**的位 —— 那是"格式里没用"，不是"忘了写"
+       ③ 把每个被占用的位单独翻转，要求解码结果必须变化
+          （声明了却没人用 = 假参数，正是 bit4 那件事的形态）
+       ④ 拿真实字节跑 decodeVoice → encodeVoice，要求逐字节相同
+
+     fld(名字, 字节偏移, 位下限, 位上限, 占几个字节)；省略位域即整字节 bit0–6。 */
+  function fld(name, byte, lo, hi, span) {
+    if (lo === undefined) { lo = 0; hi = 6; }
+    return { name: name, byte: byte, lo: lo, hi: hi, span: span === undefined ? 1 : span };
+  }
+  var OP_FIELDS = [
+    fld('egR1', 0), fld('egR2', 1), fld('egR3', 2), fld('egR4', 3),
+    fld('egL1', 4), fld('egL2', 5), fld('egL3', 6), fld('egL4', 7),
+    fld('breakPoint', 8), fld('leftDepth', 9), fld('rightDepth', 10),
+    fld('leftCurve', 11, 0, 1), fld('rightCurve', 11, 2, 3),
+    fld('rateScale', 12, 0, 2), fld('detune', 12, 3, 6),
+    fld('ampModSens', 13, 0, 1), fld('keyVelSens', 13, 2, 4),
+    fld('outputLevel', 14),
+    fld('oscMode', 15, 0, 0), fld('freqCoarse', 15, 1, 5),
+    fld('freqFine', 16),
+  ];
+  var GLOBAL_FIELDS = [
+    fld('pitchEgR1', 102), fld('pitchEgR2', 103), fld('pitchEgR3', 104), fld('pitchEgR4', 105),
+    fld('pitchEgL1', 106), fld('pitchEgL2', 107), fld('pitchEgL3', 108), fld('pitchEgL4', 109),
+    fld('algorithm', 110, 0, 4),
+    fld('feedback', 111, 0, 2), fld('oscKeySync', 111, 3, 3),
+    fld('lfoSpeed', 112), fld('lfoDelay', 113),
+    fld('lfoPitchModDepth', 114), fld('lfoAmpModDepth', 115),
+    fld('lfoSync', 116, 0, 0), fld('lfoWave', 116, 1, 3), fld('lfoPitchModSens', 116, 4, 6),
+    fld('transpose', 117),
+    fld('name', 118, 0, 6, 10),
+  ];
+  var LAYOUT = {
+    OP_BLOCK: OP_BLOCK, OP_COUNT: 6, OP_FIELDS: OP_FIELDS,
+    GLOBAL_FIELDS: GLOBAL_FIELDS, NAME_OFFSET: 118, NAME_BYTES: 10,
   };
 
   function checksum(data) {
@@ -235,7 +286,7 @@ function encodeVoice(d) {
     SYSEX_HEADER: SYSEX_HEADER,
     BANK_BYTES: BANK_BYTES, SYSEX_BYTES: SYSEX_BYTES,
     VOICE_BYTES: VOICE_BYTES, VOICES_PER_BANK: VOICES_PER_BANK, OP_BLOCK: OP_BLOCK,
-    CURVE: CURVE, LFO_WAVE: LFO_WAVE, NOTE_NAMES: NOTE_NAMES, SPEC: SPEC,
+    CURVE: CURVE, LFO_WAVE: LFO_WAVE, NOTE_NAMES: NOTE_NAMES, SPEC: SPEC, LAYOUT: LAYOUT,
     checksum: checksum, parseBank: parseBank, buildBank: buildBank,
     decodeVoice: decodeVoice, encodeVoice: encodeVoice, writeName: writeName, describe: describe,
     transposeName: transposeName, hex: hex, b64ToBytes: b64ToBytes,

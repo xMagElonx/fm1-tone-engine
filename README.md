@@ -97,6 +97,32 @@ original voices are unaffected, and a message explains how to get the data local
 
 ---
 
+## The voice format, written down and checkable
+
+[`VOICE-DATA.md`](VOICE-DATA.md) is the byte layout of a packed DX7 voice — the
+format an FM-1 stores and accepts — including the bits the format leaves unused,
+and the two places this project's own decoder was wrong for a while.
+
+The table is not prose. It lives in `engine/dx7.js` as **data** (`DX7.LAYOUT`),
+and `tools/layout.mjs` checks it against real bytes by flipping every bit the
+table claims and requiring the decoded voice to change — and by flipping every
+bit it does *not* claim and requiring the decoded voice to stay put. A declared
+parameter that nothing reads is exactly how the "oscillator sync is always off"
+bug lived undetected; that check now names the byte and the bit.
+
+The tool takes a standard `.syx` bank or a raw packed dump:
+
+```bash
+node tools/layout.mjs your-bank.syx
+```
+
+**You do not need this project, its data, or an FM-1 to use it.** If you are
+writing a DX7 importer, it will tell you which of your bytes disagree with the
+format — and the same document says plainly which parts of the format are still
+not known.
+
+---
+
 ## Licensing: the "can I ship this?" question, actually answered
 
 See **`LICENSE-AUDIT.md`**. In one line:
@@ -148,9 +174,10 @@ node   tools/midi_test.mjs       # 4. MIDI layer: byte alignment, send gates, de
 node   tools/intent_test.mjs     # 5. plain-language layer: is the direction right, measured by rendering
 node   tools/llm_test.mjs        # 6. LLM layer: malformed replies, failure fallback, no key leakage
 node   tools/smoke.mjs           # 7. page end-to-end, five scenarios
+node   tools/layout.mjs          # 8. voice-data layout audit (bit level; point it at any bank)
 ```
 
-All seven exit 0, **440 assertions total** (26 + 28 + 30 + 57 + 33 + 109 + 157), reproducible.
+All eight exit 0, **463 assertions total** (26 + 28 + 30 + 57 + 33 + 109 + 157 + 23), reproducible.
 
 **They also all exit 0 on a fresh clone.** The parts that need factory data print `SKIP` and
 say how to supply it — they neither crash nor quietly pass. That is deliberate: a public
@@ -195,6 +222,7 @@ LICENSE-AUDIT.md          licensing and provenance audit — what this repo may 
 MIDI-WRITE.md             writing to the device: why standard bank dump, and what is unverified
 NATURAL-LANGUAGE.md       the plain-language layer: structure, measured numbers, three measurement lessons
 LLM.md                    LLM integration: why no server, why the model can't break a voice, error handling
+VOICE-DATA.md             the packed voice, byte by byte — the layout, its unused bits, the write path
 
 starter/README.md         bundled library notes + design table for all 32 voices (script-generated)
 starter/FM-1_starter_bank.syx  the 32 original voices as a standard DX7 bank, importable into Dexed
@@ -214,6 +242,7 @@ tools/midi_test.mjs       4. MIDI audit (includes byte-for-byte comparison again
 tools/intent_test.mjs     5. intent audit (direction correctness measured, never read off the code)
 tools/llm_test.mjs        6. LLM audit (fake fetch throughout; no key, no network)
 tools/smoke.mjs           7. page end-to-end (five scenarios)
+tools/layout.mjs          8. voice-data layout audit: bit-level attribution, round-trip, ranges
 tools/serve.mjs           local static server (the way out when file:// can't get MIDI permission)
 tools/serve.cmd           Windows double-click version — no typing commands
 tools/render_demo.mjs     render audition audio for the factory voices
@@ -288,7 +317,7 @@ its implementation later would be a licensing question.
 
 ---
 
-## Twelve real problems along the way (all fixed, all left a trace)
+## Thirteen real problems along the way (all fixed, all left a trace)
 
 1. **The algorithm table was missing a layer of sharing.** Algorithms 19–25 use a temporary
    variable in the original notation so one modulator feeds several carriers; I transcribed
@@ -379,6 +408,17 @@ its implementation later would be a licensing question.
     **The environment that is easiest to reproduce is the one most likely to fool you.**
     (Same root cause as problem 5, entering through a different door.)
 
+13. **A mis-typed name became `NaN`, and nothing complained.** Writing `tools/layout.mjs` I
+    typed `DX7.SYX_BYTES` where the export is `DX7.SYSEX_BYTES`. Reading a property that does
+    not exist gives `undefined`; `4104 % undefined` is `NaN`; and `NaN === 0` is simply
+    `false`. So the branch took the wrong path without a sound, and the failure surfaced a call
+    away as a puzzled "I cannot tell what this file is". No exception, no warning, nothing
+    pointing at the typo. Fixed by **asserting the constants before using them** — the tool now
+    refuses to start if any number it is built on is not a positive integer. **In JavaScript a
+    wrong name is not an error; it is a value.** Which is problems 5 and 12 in their purest
+    form: the check you build to catch silent mistakes is itself code, and it can be silently
+    wrong.
+
 One by-product: a widely circulated DX7 byte-layout table puts the algorithm number at
 byte 96. **Measured, it is byte 110.** Which is why this project works backwards from real
 bytes instead of coding against second-hand tables.
@@ -415,9 +455,11 @@ bytes instead of coding against second-hand tables.
 
 ## Documentation language
 
-**The English README is the front door; the in-depth documents are currently in Chinese**
-(`LICENSE-AUDIT.md`, `MIDI-WRITE.md`, `NATURAL-LANGUAGE.md`, `LLM.md`). Translating the
-licensing audit first is the plan — it is the one this community asks about most. Until then,
+**The English README is the front door, and `VOICE-DATA.md` is in English too** — that one is
+written for this community rather than for the author, because a byte layout is useful to
+whoever is building an FM-1 or a DX7 tool. The remaining in-depth documents are still in
+Chinese (`LICENSE-AUDIT.md`, `MIDI-WRITE.md`, `NATURAL-LANGUAGE.md`, `LLM.md`). Translating the
+licensing audit next is the plan — it is the one this community asks about most. Until then,
 the source comments and the tests are readable, and `LLM.md` is the shortest of the four.
 
 The UI itself is in Chinese.
