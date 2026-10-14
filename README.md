@@ -14,6 +14,9 @@ To make it understand *descriptions* rather than literal keywords — "like an o
 piano, but brighter" — you can swap the middle layer for an LLM. **No server required: it
 talks to the provider straight from the page.** See [`LLM.md`](LLM.md).
 
+**In a hurry?** [`SHOWCASE.md`](SHOWCASE.md) is the project on one screen: what it does, how it
+is proven, and what it caught.
+
 ---
 
 ## What it does
@@ -238,6 +241,7 @@ MIDI-WRITE.md             writing to the device: why standard bank dump, and wha
 NATURAL-LANGUAGE.md       the plain-language layer: structure, measured numbers, three measurement lessons
 LLM.md                    LLM integration: why no server, why the model can't break a voice, error handling
 VOICE-DATA.md             the packed voice, byte by byte — the layout, its unused bits, the write path
+SHOWCASE.md               the project on one screen: what it does, how it is proven, what it caught
 
 starter/README.md         bundled library notes + design table for all 32 voices (script-generated)
 starter/FM-1_starter_bank.syx  the 32 original voices as a standard DX7 bank, importable into Dexed
@@ -374,7 +378,9 @@ its implementation later would be a licensing question.
 7. **"Oscillator sync" had been wrong since the day it was written.** It was read from bit 4 of
    byte 111; the standard format puts it at **bit 3**. Every real value is ≤ 15, so bit 4 is
    always 0 — the platform therefore read "off" forever, the UI displayed "off", and in fact
-   **16 voices have it on**. It stayed silent for a whole round: format valid, round-trip
+   **87 of the 128 factory voices have it on** (measured over `ref/packed128.bin`; the full
+   distribution of byte 111 is in `SHOWCASE.md`, and it tops out at 15). It stayed silent for a
+   whole round: format valid, round-trip
    passing, rendering normal. What caught it was the **pack→unpack round-trip assertion** added
    for voice editing — 127 bytes round-tripped identically and only 111 disagreed, which sent
    me back to the standard. **First "one bit too many", then "this parameter has always been
@@ -463,16 +469,19 @@ bytes instead of coding against second-hand tables.
   the tests pass, and the bytes it emits are byte-identical to the real world's — but "where
   the device stores them and in what order" needs a physical unit. What to check first is in
   `MIDI-WRITE.md` section 6
-- Writing is irreversible: the FM-1 only receives, it never sends, so voices already on the
-  device cannot be read back
+- Writing is irreversible in practice: the FM-1 answers **no standard DX7 read request**, so
+  voices already on the device cannot be read back. (Corrected 2026-10-15: one undocumented
+  private command does return the *current* voice, one at a time, in a format that still needs
+  parsing — this project neither implements nor has verified it. `MIDI-WRITE.md` §5.5.)
 
 ---
 
 ## Documentation language
 
-**The English README is the front door, and `VOICE-DATA.md` is in English too** — that one is
-written for this community rather than for the author, because a byte layout is useful to
-whoever is building an FM-1 or a DX7 tool. The remaining in-depth documents are still in
+**The English README is the front door; `SHOWCASE.md` and `VOICE-DATA.md` are in English too.**
+`SHOWCASE.md` is the version for someone with sixty seconds, and `VOICE-DATA.md` is written for
+this community rather than for the author, because a byte layout is useful to whoever is
+building an FM-1 or a DX7 tool. The remaining in-depth documents are still in
 Chinese (`LICENSE-AUDIT.md`, `MIDI-WRITE.md`, `NATURAL-LANGUAGE.md`, `LLM.md`). Translating the
 licensing audit next is the plan — it is the one this community asks about most. Until then,
 the source comments and the tests are readable, and `LLM.md` is the shortest of the four.
