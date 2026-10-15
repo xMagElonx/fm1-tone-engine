@@ -274,6 +274,47 @@ check(!!accErr && /https|安全上下文/.test(accErr.message),
 restoreNav();
 check(MIDI.isSupported() === false, '还原后 Node 侧的判定回到「不支持」');
 
+/* ------------------------------------------------ 实时单参数消息（V15 层）
+   与 bank dump 是两种形状：7 字节、无校验和。assertLiveSysex 必须只认这种，
+   sendBank 的 4104 字节包和乱七八糟的短消息都得被它挡下。 */
+console.log('\n── 实时单参数消息（sendLive / assertLiveSysex）──');
+
+const P = require('../engine/params.js');
+const liveGood = P.paramChange(P.GLOBAL_BASE + 8, 31);        // 算法 → 31（0x1F）
+check(liveGood.length === 7, 'paramChange 出 7 字节', String(liveGood.length));
+check(MIDI.assertLiveSysex(liveGood) === true, '合法的实时消息过检');
+check(DX7.hex(liveGood) === 'f0 43 10 01 08 1f f7',
+  '真机锚点形状：f0 43 10 01 08 vv f7', DX7.hex(liveGood));
+
+const throwsWith = (bytes, re, what) => {
+  let err = null;
+  try { MIDI.assertLiveSysex(bytes); } catch (e) { err = e; }
+  check(!!err && re.test(err.message), what, err ? err.message : '(没有抛错)');
+};
+throwsWith(null, /不是字节数组/, 'null 会被挡下');
+throwsWith(DX7.buildBank(new Uint8Array(DX7.BANK_BYTES)), /7 字节/,
+  'bank dump（4104 字节）不是实时消息 —— 两种尺不能混');
+throwsWith(new Uint8Array([0xF0, 0x7D, 0x01, 0x08, 0x1F, 0x00, 0xF7]), /厂商 ID/,
+  '非 Yamaha 厂商 ID 会被挡下');
+throwsWith(new Uint8Array([0xF0, 0x43, 0x10, 0x01, 0x08, 0x1F, 0x00]), /F7/, '没有 F7 结尾会被挡下');
+
+const fakeOut = { send: (b) => { liveSent.push(Array.from(b)); } };
+let liveSent = [];
+const liveReport = MIDI.sendLive(fakeOut, [liveGood, P.paramChange(P.GLOBAL_BASE + 9, 7)],
+  { label: '测试' });
+check(liveReport.count === 2 && liveReport.bytes === 14,
+  '报告按条数与字节数记账', JSON.stringify(liveReport));
+check(liveReport.acknowledged === false, '报告明确标注「没有应答」');
+check(liveSent.length === 2 && liveSent[0].length === 7,
+  '两条消息都按 7 字节原样发出', JSON.stringify(liveSent[0]));
+
+let liveErr = null;
+try { MIDI.sendLive(null, [liveGood]); } catch (e) { liveErr = e; }
+check(!!liveErr && /输出端口/.test(liveErr.message), '没有端口时 sendLive 报错');
+liveErr = null;
+try { MIDI.sendLive(fakeOut, []); } catch (e) { liveErr = e; }
+check(!!liveErr && /没有要发送/.test(liveErr.message), '空消息列表会被挡下');
+
 /* ------------------------------------------------------------------ 结论 */
 console.log('\n' + '─'.repeat(56));
 if (fail === 0) {

@@ -164,8 +164,13 @@
     <div id="midi-body"></div>
   </div>
 
+  <div class="panel" id="tech-panel">
+    <h2>⑦ 技法 · 实时单参数</h2>
+    <div id="tech-body"></div>
+  </div>
+
   <div class="panel">
-    <h2>⑦ 出厂音色来源与授权</h2>
+    <h2>⑧ 出厂音色来源与授权</h2>
     <div class="hint" style="margin:0 0 10px">
       逐槽溯源：来自哪个 DX7 音色库文件、原名是什么、能否追溯回 Yamaha 官方卡带。
       完整授权分析见仓库根目录的 <b>LICENSE-AUDIT.md</b>。
@@ -181,6 +186,7 @@
 <script src="engine/midi.js"></script>
 <script src="engine/intent.js"></script>
 <script src="engine/llm.js"></script>
+<script src="engine/params.js"></script>
 <script src="data/starter.js"></script>
 <script src="data/factory.js"></script>
 <script>
@@ -200,6 +206,7 @@ const S = {
   autoplay: true,
   ctx: null, src: null, lastBuf: null,
   midi: { access: null, output: null, confirmed: false, log: '' },
+  tech: { changes: null, packed: null, confirmed: false, log: '' },
   nl: {
     text: '', intent: null, result: null, undo: null,
     source: 'local',        // 'local' = 本地词典（离线免费）；'llm' = 接大模型
@@ -415,12 +422,15 @@ function renderResults() {
 function selectVoice(v, play) {
   S.sel = v;
   /* 预览是绑在那个锚点上的：换了音色，之前算出来的改动就不再属于当前对象，
-     必须丢掉 —— 否则会把 A 音色的改动留到 B 音色上。 */
+     必须丢掉 —— 否则会把 A 音色的改动留到 B 音色上。技法宏同理：
+     它是按「当前选中音色」的 packed 字节算的，换锚点必须作废重算。 */
   S.nl.result = null; S.nl.intent = null;
+  S.tech.changes = null; S.tech.packed = null;
   document.querySelectorAll('.voice').forEach(el =>
     el.classList.toggle('sel', el.dataset.key === v.key));
   showDetail(v);
   renderNl();
+  renderTech();
   if (play && S.autoplay) playVoice(v);
 }
 
@@ -758,6 +768,155 @@ function doWrite() {
   } catch (err) {
     M.log = `<span style="color:var(--bad)">写入失败：${esc(err.message)}</span>`;
     renderMidi();
+  }
+}
+
+/* ------------------------------------------------ 技法 · 实时单参数（第 5 层）
+   这一面板是 engine/params.js 的现场：闷音宏 = 一串实时参数消息
+   （F0 43 1n pp qq vv F7，7 字节、无校验和），发给设备后**立即作用于
+   正在响的音** —— 不刷固件、不发整包 bank、不经过 SAVE。
+   与写入区的三条纪律在这里同样生效：
+     · 「已发出」≠「设备已执行」—— 这类消息同样没有应答；
+     · 整条路径是真机未验证的（V15 宣布支持，圈内有一条实测锚点，
+       但 155 个参数是否全被接受、是否立即生效，都要等真机）；
+     · 发送前必须勾一次确认 —— 它会直接改你手上设备正在响的东西。
+   试算永远离线可用：不发 MIDI 也能看宏要动哪些参数，改了几个、各是多少。 */
+function techPacked() {
+  if (!S.sel) return null;
+  return S.sel.d.raw;        // 导出路径已在用的同一份 packed 字节
+}
+
+function renderTech() {
+  const T = S.tech, M = S.midi;
+  const host = $('tech-body');
+  const P = window.DX7_PARAMS;
+  /* 首次渲染时 select 还不在 DOM 里，$ 取到 null —— 必须先取旧值再重画，
+     否则真浏览器上第一帧就崩（桩里看不出这个差别，桩永远给元素）。 */
+  const prevParam = $('tech-param') ? $('tech-param').value : '';
+  const packed = T.packed || techPacked();
+  /* 选了音色就自动试算 —— 宏是纯函数，算一遍很便宜；
+     面板常显当前音色的宏形态，不用用户先点一次按钮。 */
+  if (S.sel && P && !T.changes && packed) {
+    try { T.packed = packed; T.changes = P.palmMute(packed).changes; } catch (e) { T.changes = []; }
+  }
+
+  const midiNote = M.access
+    ? (M.output ? '' : '<span style="color:var(--bad)">还没有输出端口。</span>')
+    : '<span style="color:var(--ink2)">未连接设备 —— 上面的 ⑥ 区连接后才能发送；试算不受影响。</span>';
+  const gate = T.changes && T.changes.length && M.output && T.confirmed ? '' : ' disabled';
+
+  let macro = '';
+  if (!S.sel) {
+    macro = '<div class="empty">先在下面的音色库里选一个音色 —— 技法按当前选中的音色实时计算。</div>';
+  } else if (!T.changes) {
+    macro = '<div class="empty">还没有试算。</div>';
+  } else {
+    const rows = T.changes.map(c =>
+      `<tr><td>${esc(c.name)}</td><td>${c.pp} / ${c.qq}</td>` +
+      `<td>${c.from}</td><td>→</td><td><b style="font-weight:600">${c.to}</b></td></tr>`).join('');
+    macro = T.changes.length
+      ? `<table style="width:100%;margin:8px 0"><tr><th>参数</th><th>pp/qq</th>` +
+        `<th>现值</th><th></th><th>新值</th></tr>${rows}</table>` +
+        `<div class="hint">共 ${T.changes.length} 条实时消息（每条 7 字节）。` +
+        `试算不改音色库 —— 宏只发消息给设备，本地的音色一个字节都不动。</div>`
+      : '<div class="empty">这个音色已经是闷音形态，没有要改的参数。</div>';
+  }
+
+  /* 单参数发送器：真机测试的第 8 步就用它 —— 逐条发、逐条听。 */
+  let picker = '';
+  if (S.sel && P) {
+    const opts = [];
+    for (let i = 0; i < P.PARAM_COUNT; i++) {
+      const inf = P.paramInfo(i);
+      opts.push(`<option value="${i}">${i} · ${inf.isOp ? 'OP' + inf.op + ' ' : ''}` +
+        `${esc(inf.name)}（${inf.pp}/${inf.qq}）</option>`);
+    }
+    const cur = packed ? P.getParam(packed, Number(prevParam || 0)) : 0;
+    picker = `
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <b style="font-weight:600">单参数：</b>
+        <select id="tech-param" style="max-width:340px">${opts.join('')}</select>
+        <span>现值 <b id="tech-cur" style="font-weight:600">${cur}</b></span>
+        <input id="tech-value" type="number" style="width:64px" placeholder="新值">
+        <button id="btn-tech-one" class="sm"${gate}>发这条</button>
+      </div>`;
+  }
+
+  host.innerHTML = `
+    <div class="hint" style="margin:0 0 10px">
+      不刷固件的技法层：宏 = 一串 7 字节实时参数消息，改的是<b>设备上正在响的音色</b>。
+      <span class="tag y">真机未验证</span> V15 宣布支持此消息，但参数覆盖范围、
+      是否立即生效、断电规则都还没在真机上测过 —— 测法见 MIDI-WRITE.md 第六节第 8 步。
+      ${midiNote}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button id="btn-tech-mute" class="sm"${S.sel ? '' : ' disabled'}>试算闷音宏</button>
+      <label style="display:flex;gap:4px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="tech-confirm"${T.confirmed ? ' checked' : ''}>
+        确认向设备发送实时参数消息
+      </label>
+      <button id="btn-tech-send" class="primary"${gate}>
+        发送 ${T.changes ? T.changes.length : 0} 条实时消息
+      </button>
+    </div>
+    ${macro}
+    ${picker}
+    <div id="tech-log" style="margin-top:8px"></div>`;
+
+  /* 日志按元素单独写 —— 与 renderMidi 的 midi-log 同一模式：
+     桩的 innerHTML 只是个字符串、不嵌套子元素，模板里拼进去的内容
+     测试按 id 是取不到的。 */
+  if (T.log) $('tech-log').innerHTML = T.log;
+
+  $('btn-tech-mute').onclick = () => {
+    const packed = techPacked();
+    if (!packed) return;
+    try {
+      T.packed = packed;
+      T.changes = P.palmMute(packed).changes;
+      T.log = '';
+    } catch (err) { T.log = `<span style="color:var(--bad)">试算失败：${esc(err.message)}</span>`; }
+    renderTech();
+  };
+  $('tech-confirm').onchange = () => { T.confirmed = $('tech-confirm').checked; renderTech(); };
+  $('btn-tech-send').onclick = () => {
+    try {
+      const msgs = P.changesToSysex(T.changes);
+      const report = FM1MIDI.sendLive(M.output, msgs, { label: '闷音宏' });
+      T.log = `<span style="color:var(--ok)">已发出 ${report.count} 条实时消息` +
+        `（共 ${report.bytes} 字节）· 端口 ${esc(report.port)} · 耗时 ${report.ms.toFixed(1)} ms</span><br>` +
+        `<b style="font-weight:500">注意：这只是「字节已经发出去」。</b> 这条路径真机未验证 —— ` +
+        `请立刻听：正在响的音变了没有？变化是不是衰减变快、音头发噪？结果记进 MIDI-WRITE.md。`;
+    } catch (err) {
+      T.log = `<span style="color:var(--bad)">发送失败：${esc(err.message)}</span>`;
+    }
+    renderTech();
+  };
+  if (S.sel) {
+    if (prevParam) $('tech-param').value = prevParam;   // 重画后保住用户选中的参数
+    $('tech-param').onchange = () => {
+      const cur = P.getParam(T.packed, Number($('tech-param').value));
+      $('tech-cur').textContent = String(cur);
+    };
+    $('btn-tech-one').onclick = () => {
+      const idx = Number($('tech-param').value);
+      const to = Number($('tech-value').value);
+      const inf = P.paramInfo(idx);
+      if (!Number.isInteger(to) || to < inf.min || to > inf.max) {
+        T.log = `<span style="color:var(--bad)">参数 ${idx}（${esc(inf.name)}）的合法区间是 ` +
+          `${inf.min}-${inf.max}，收到 ${$('tech-value').value || '空'}。</span>`;
+        renderTech(); return;
+      }
+      try {
+        const report = FM1MIDI.sendLive(M.output, [P.paramChange(idx, to)],
+          { label: '单参数 ' + inf.name });
+        T.log = `<span style="color:var(--ok)">已发出：参数 ${idx}（${esc(inf.isOp ? 'OP' + inf.op + ' ' : '')}${esc(inf.name)}）→ ${to}` +
+          ` · 端口 ${esc(report.port)}</span><br>听：生效了吗？立即的还是下一次按键才生效？`;
+      } catch (err) {
+        T.log = `<span style="color:var(--bad)">发送失败：${esc(err.message)}</span>`;
+      }
+      renderTech();
+    };
   }
 }
 
@@ -1524,6 +1683,7 @@ function selfTest() {
   renderNlSettings();
   renderResults();
   renderNl();
+  renderTech();
   selfTest();
 })();
 </script>

@@ -27,9 +27,10 @@ const check = (cond, msg, extra) => {
 const skip = (msg) => console.log(`  SKIP  ${msg}`);
 
 /* 引擎走 UMD：在 Node 里 module 未定义 → 挂到 globalThis。只需挂一次。
-   顺序要紧：midi.js 依赖 DX7，intent.js 依赖 DX7 与 FM_ENGINE。 */
+   顺序要紧：midi.js 依赖 DX7，intent.js 依赖 DX7 与 FM_ENGINE，
+   params.js 是技法面板（第 5 层）的参数表。 */
 for (const f of ['engine/dx7.js', 'engine/fm.js', 'engine/midi.js', 'engine/intent.js',
-  'engine/llm.js']) {
+  'engine/llm.js', 'engine/params.js']) {
   new Function(readFileSync(path.join(ROOT, f), 'utf8'))();
 }
 
@@ -96,7 +97,7 @@ function runScenario({ withFactory, midi, fetchImpl }) {
   const alerts = [];
   // 引擎挂在 globalThis 上，这里一并挂到桩 window 上，保证页面两条路径都能取到。
   const window = { AudioContext: FakeAudioContext, DX7: globalThis.DX7, FM_ENGINE: globalThis.FM_ENGINE,
-    FM1_LLM: globalThis.FM1_LLM };
+    FM1_LLM: globalThis.FM1_LLM, DX7_PARAMS: globalThis.DX7_PARAMS };
   const sandbox = {
     window, document,
     atob: globalThis.atob, Blob: globalThis.Blob,
@@ -648,6 +649,116 @@ check(totalNet === 0, `五个场景合计发出的"意外"网络请求为 0（�
 check(Eseen.length === 5, '场景 E 自己发的 5 次请求全打在假 fetch 上', String(Eseen.length));
 check(E.alerts.length === 0, '场景 E 没有弹窗', E.alerts.join(' | '));
 
+/* ==========================================================================
+   场景 F：第 5 层 —— 技法面板（实时单参数写入）
+   --------------------------------------------------------------------------
+   engine/params.js 的现场验证：选一个音色 → 试算闷音宏 → 勾确认 → 发送，
+   把页面实际发出的字节截下来，与测试侧独立算出的预期逐条对齐。
+   这条路径真机未验证 —— 所以断言的重心是「发的字节正是参数表说该发的」，
+   而不是「设备会怎么响」。
+   ========================================================================== */
+console.log('\n═══ 场景 F：技法面板 → 实时单参数消息（mock 端口，截真字节）═══');
+
+const FXP = globalThis.DX7_PARAMS;
+
+const portF = new MIDI.FakeFm1();
+const accessF = MIDI.fakeAccess([portF]);
+setNav({ requestMIDIAccess: () => Promise.resolve(accessF) });
+
+const F = runScenario({
+  withFactory: false,
+  midi: { navigator: { requestMIDIAccess: () => Promise.resolve(accessF) } },
+});
+const $f = F.$;
+const tech = () => $f('tech-body').innerHTML;
+await tick();
+
+console.log('\n① 面板常驻，未选音色时说清楚');
+check(tech().length > 0, '启动后技法面板已渲染');
+check(/真机未验证/.test(tech()), '面板带着「真机未验证」标注 —— 不能让未验证路径看起来是验过的');
+check(/未连接设备/.test(tech()) || /⑥ 区连接/.test(tech()), '说明了发送要先进 ⑥ 区连接');
+check(/选一个音色/.test(tech()), '未选音色时给出指引而不是空白');
+check(!/btn-tech-send/.test(tech().match(/btn-tech-send[^>]*/)?.[0] || '') ||
+  /disabled/.test((tech().match(/<button id="btn-tech-send"[^>]*>/) || [''])[0]),
+  '没有音色时发送按钮不可用');
+
+console.log('\n② 连接设备，选中音色，面板自动试算');
+$f('btn-midi-connect').onclick();
+await tick();
+$f('q').value = 'INIT SINE'; $f('q').oninput();
+$f('voices').children[0].onclick();
+await tick();
+check(/pp\/qq/.test(tech()), '宏试算表列出了参数的 pp/qq 编址');
+check(/条实时消息/.test(tech()), '给出消息条数');
+check(/试算不改音色库/.test(tech()), '说明试算不动本地音色');
+check(portF.received.length === 0, '试算阶段设备什么都没收到');
+
+const sel = F.S || null;   // 页面内部状态不直接可取时，走 DOM 断言
+console.log('\n③ 独立复算预期宏，与页面显示对齐');
+/* 测试侧不读页面状态，自己算一遍：INIT SINE 的 packed 字节从随附音色库取。 */
+const swF = {};
+new Function('window', readFileSync(path.join(ROOT, 'data', 'starter.js'), 'utf8'))(swF);
+const starterPacked = DX7.parseBank(DX7.b64ToBytes(swF.FM1_STARTER.banks[0]));
+const expected = FXP.palmMute(starterPacked.slice(0, 128)).changes;
+check(expected.length > 0, '测试侧独立算出的闷音宏非空（INIT SINE 有可改项）',
+  String(expected.length));
+/* 页面上「发送 N 条」的 N 必须与测试侧独立算出的一致 ——
+   两边各算各的，相等才说明页面真的在用 params.js 算这个音色。 */
+const nOnPage = Number((tech().match(/发送 (\d+) 条实时消息/) || [])[1]);
+check(nOnPage === expected.length,
+  `页面显示的条数 ${nOnPage} = 测试侧独立算出的 ${expected.length}`);
+
+console.log('\n④ 确认闸门');
+check(/disabled/.test((tech().match(/<button id="btn-tech-send"[^>]*>/) || [''])[0]),
+  '没勾确认时发送按钮禁用');
+$f('tech-confirm').checked = true; $f('tech-confirm').onchange();
+await tick();
+check(!/disabled/.test((tech().match(/<button id="btn-tech-send"[^>]*>/) || [''])[0]),
+  '勾选确认后发送按钮可用');
+
+console.log('\n⑤ 发送，截字节，与参数表逐条对齐');
+$f('btn-tech-send').onclick();
+await tick();
+check(portF.received.length === expected.length,
+  `设备收到 ${expected.length} 条消息`, String(portF.received.length));
+const expectedBytes = FXP.changesToSysex(expected);
+let allMatch = true, firstDiff = '';
+for (let i = 0; i < expectedBytes.length; i++) {
+  const got = Uint8Array.from(portF.received[i]);
+  if (DX7.hex(got) !== DX7.hex(expectedBytes[i])) { allMatch = false; firstDiff = `#${i}: ` +
+    `页面 ${DX7.hex(got)} vs 预期 ${DX7.hex(expectedBytes[i])}`; break; }
+}
+check(allMatch, '每一条消息的 7 个字节都 = params.js 按该音色算出的预期', firstDiff);
+check(portF.received.every(m => m.length === 7), '全部是 7 字节短消息（不是 bank dump）');
+check(portF.received.every(m => m[0] === 0xF0 && m[m.length - 1] === 0xF7),
+  '每条都以 F0 开头、F7 结尾');
+check(portF.received.every(m => (m[1] & 0xF0) === 0x40), '每条都带 Yamaha 厂商 ID（43）');
+const logF = $f('tech-log').innerHTML;
+check(/已发出 \d+ 条实时消息/.test(logF), '页面报告了发出的条数', logF.slice(0, 70));
+check(/真机未验证/.test(logF), '发送成功也标着「真机未验证」—— 已发出不等于已执行');
+
+console.log('\n⑥ 单参数发送器：越界报错，合法值逐字节对');
+const idxAlg = 134;   // 算法号：pp=01 qq=08（真机锚点所在参数）
+$f('tech-param').value = String(idxAlg);
+$f('tech-param').onchange();
+$f('tech-value').value = '200';
+$f('btn-tech-one').onclick();
+await tick();
+check(/合法区间/.test($f('tech-log').innerHTML) || /区间/.test($f('tech-log').innerHTML),
+  '越界值被拒绝并说明合法区间', $f('tech-log').innerHTML.slice(0, 70));
+check(portF.received.length === expected.length, '越界时设备没有多收到任何消息');
+$f('tech-value').value = '31';
+$f('btn-tech-one').onclick();
+await tick();
+const one = Uint8Array.from(portF.received[portF.received.length - 1]);
+check(one.length === 7 && DX7.hex(one) === DX7.hex(FXP.paramChange(idxAlg, 31)),
+  '单参数消息 = paramChange(134, 31) 的预期字节', DX7.hex(one));
+check(DX7.hex(one.slice(3, 6)) === '01 08 1f',
+  '编址就是真机锚点那组（pp 01 / qq 08 / 值 1F）', DX7.hex(one.slice(3, 6)));
+
+console.log('\n⑦ 兜底');
+check(F.alerts.length === 0, '场景 F 没有弹窗', F.alerts.join(' | '));
+
 console.log(`\n${'─'.repeat(56)}`);
-console.log(fail === 0 ? '结论：五个场景端到端执行全部通过。' : `结论：${fail} 项失败。`);
+console.log(fail === 0 ? '结论：六个场景端到端执行全部通过。' : `结论：${fail} 项失败。`);
 process.exit(fail === 0 ? 0 : 1);

@@ -174,6 +174,59 @@
   }
 
   /* ============================================================================
+     实时单参数消息（V15 固件）：F0 43 1n pp qq vv F7，7 字节，无校验和。
+     ----------------------------------------------------------------------------
+     与 bank dump 完全不同的形状，校验也完全不同 —— 所以单独一把尺，
+     绝不复用 assertWritableSysex（它只认 4104 字节的整包）。
+     目的：不刷固件、不发整包，实时改「正在响的音色」的一个参数。
+     出处与参数编址见 engine/params.js；真机锚点是 sezare56 的
+     F0 43 10 01 08 1F F7（算法 → 32）。
+
+     ⚠ 真机未验证的部分（界面上也必须带着这个标注）：
+       · 全部 155 个参数是否都被固件接受
+       · 是否立即作用于正在响的音（还是下一次按键才生效）
+       · 背靠背多条短消息会不会被吞
+     设备对这类消息同样没有已知应答，所以「已发出」依然 ≠「已执行」。
+     ========================================================================== */
+  function assertLiveSysex(bytes) {
+    if (!bytes || typeof bytes.length !== 'number')
+      throw new Error('要发送的不是字节数组');
+    if (bytes.length !== 7)
+      throw new Error('实时单参数消息必须是 7 字节，实际 ' + bytes.length + ' 字节');
+    if (bytes[0] !== 0xF0)
+      throw new Error('实时单参数消息必须以 F0 开头：' + DX7.hex(bytes.slice(0, 3)));
+    if ((bytes[1] & 0xF0) !== 0x40)        // 0x43 = Yamaha 厂商 ID（低 4 位是通道）
+      throw new Error('不是 Yamaha 厂商 ID（43）：' + DX7.hex(bytes.slice(0, 3)));
+    if (bytes[bytes.length - 1] !== 0xF7)
+      throw new Error('结尾不是 F7');
+    return true;
+  }
+
+  /* 依次发出一组实时参数消息。messages 里每一项都必须先过 assertLiveSysex。
+     返回一份发送报告，形状与 sendBank 的对齐（页面显示与测试断言共用）。 */
+  function sendLive(output, messages, opts) {
+    opts = opts || {};
+    if (!output) throw new Error('还没有选择输出端口。');
+    if (!messages || !messages.length) throw new Error('没有要发送的消息。');
+    for (var i = 0; i < messages.length; i++) assertLiveSysex(messages[i]);
+
+    var t0 = now();
+    for (var j = 0; j < messages.length; j++) output.send(messages[j]);
+    var ms = now() - t0;
+
+    return {
+      label: opts.label || '',
+      count: messages.length,
+      bytes: messages.length * 7,
+      port: portLabel(output),
+      ms: ms,
+      /* 与 sendBank 同一条纪律：没有应答就只能说「已发出」。
+         这类消息是否真的被执行，只能靠真机听/测，不能靠这里报成功。 */
+      acknowledged: false,
+    };
+  }
+
+  /* ============================================================================
      设备侧模拟：FM-1 的接收行为（验证用）
      ----------------------------------------------------------------------------
      它是协议另一半的可执行规范，所以跟发送方放在同一个文件里 ——
@@ -208,6 +261,9 @@
     if (this.failNext) { this.failNext = false; throw new Error('端口已断开'); }
     if (this.state !== 'connected') throw new Error('端口未连接');
     this.received.push(Array.from(bytes));
+    /* V15 实时单参数消息（7 字节，无校验和）：只记录，不假装知道设备
+       会不会执行、何时执行 —— 那是真机要回答的问题。见 sendLive 处的标注。 */
+    if (bytes.length === 7 && bytes[0] === 0xF0) return true;
     /* 坏包在这里抛错。这正是要验的那件事：页面发出的字节，
        必须能被一个忠实实现协议的设备解开。 */
     var data = DX7.parseBank(bytes);
@@ -238,6 +294,7 @@
     listOutputs: listOutputs, portLabel: portLabel,
     looksLikeFm1: looksLikeFm1, pickOutput: pickOutput,
     voiceNameAt: voiceNameAt, sendBank: sendBank,
+    assertLiveSysex: assertLiveSysex, sendLive: sendLive,
     FakeFm1: FakeFm1, fakeAccess: fakeAccess,
   };
 });
