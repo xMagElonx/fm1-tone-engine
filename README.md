@@ -26,7 +26,7 @@ is proven, and what it caught.
 > circulated AI-generated codec dead by measurement: algorithm number at the wrong byte,
 > 0/128 round-trips, 20 bytes silently dropped per voice.
 
-> **⚠ Hardware status — testers welcome.** Everything here runs and is covered by 482 test
+> **⚠ Hardware status — testers welcome.** Everything here runs and is covered by 521 test
 > assertions, **but the device-write path has never touched a real FM-1.** The bytes it sends
 > are byte-identical to real-world captures; what is *not* verified is what the device does
 > with them — which bank it lands in, whether a 4104-byte SysEx survives the MIDI stack, and
@@ -223,9 +223,10 @@ node   tools/llm_test.mjs        # 6. LLM layer: malformed replies, failure fall
 node   tools/smoke.mjs           # 7. page end-to-end, five scenarios
 node   tools/layout.mjs          # 8. voice-data layout audit (bit level; point it at any bank)
 node   tools/tablecheck.mjs       # 9. are the circulated layout tables right? (measure, don't trust)
+node   tools/param_test.mjs       # 10. single-parameter live-write layer: VCED table, SysEx, macros
 ```
 
-All nine exit 0, **482 assertions total** (26 + 28 + 30 + 57 + 33 + 109 + 157 + 23 + 19), reproducible.
+All ten exit 0, **521 assertions total** (26 + 28 + 30 + 57 + 33 + 109 + 157 + 23 + 19 + 39), reproducible.
 (The last figure for tablecheck assumes the factory bank is present; on the bundled 32 voices
 its four liveness assertions print `SKIP` with instructions instead.)
 
@@ -296,6 +297,9 @@ tools/llm_test.mjs        6. LLM audit (fake fetch throughout; no key, no networ
 tools/smoke.mjs           7. page end-to-end (five scenarios)
 tools/layout.mjs          8. voice-data layout audit: bit-level attribution, round-trip, ranges
 tools/tablecheck.mjs      9. cross-check a layout table against real bytes: range, liveness, overlap
+tools/param_test.mjs      10. live single-parameter layer: VCED table, round-trip, SysEx anchor, macros
+
+engine/params.js         the 155-parameter VCED table + palm-mute macro (live-write layer)
 tools/serve.mjs           local static server (the way out when file:// can't get MIDI permission)
 tools/serve.cmd           Windows double-click version — no typing commands
 tools/render_demo.mjs     render audition audio for the factory voices
