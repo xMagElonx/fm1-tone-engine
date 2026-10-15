@@ -2,7 +2,7 @@
 
 <sub>[English README](README.md) · 线上直接可用：<https://fm1-tone-engine.app.workbuddy.host/></sub>
 
-浏览器里的 M-VAVE FM-1 音色引擎。**检索、试听、说一句人话改音色、导出、写入设备。**
+浏览器里的 M-VAVE FM-1 音色引擎（M-VAVE FM1，也常写作 FM-1 / Fm1，同一台机器）。**检索、试听、说一句人话改音色、导出、写入设备。**
 
 双击 `index.html` 即可运行。没有构建步骤，没有依赖。
 写入设备那一项需要一台 FM-1；其余全部不需要硬件，也不需要网络。

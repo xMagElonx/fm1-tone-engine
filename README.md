@@ -1,6 +1,7 @@
 # FM-1 Tone Bench
 
-An M-VAVE FM-1 voice engine that lives in the browser. **Search, audition, edit by plain
+An M-VAVE FM-1 voice engine that lives in the browser (M-VAVE FM1, sometimes written
+FM-1 or Fm1 — same machine). **Search, audition, edit by plain
 language, export, write to the device.**
 
 **▶ Live: https://fm1-tone-engine.app.workbuddy.host/** — no install, no build, no account.
