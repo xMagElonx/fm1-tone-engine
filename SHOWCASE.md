@@ -8,6 +8,16 @@ plain language, export, write to the device. No install, no build, no server, no
 This page answers three questions and nothing else: **what it does**, **how it is proven**, and
 **what it caught**. The depth is in the other documents; this is the front page.
 
+> **The one thing here that did not exist before:** the byte-layout cross-checker
+> ([`tools/tablecheck.mjs`](tools/tablecheck.mjs)). The FM-1 / DX7 scene already has editors, AI
+> patch tools and librarians — but until this file, it had no way to ask *"is the voice-format
+> table I'm about to code against actually true?"* Four measurement rulers, real bytes, no
+> authority required: they find wrong byte positions, dead bits, and double-claimed bytes that
+> no format validation, checksum, or code review will ever surface. Full report:
+> **[`LAYOUT-CROSSCHECK.md`](LAYOUT-CROSSCHECK.md)** — including a widely circulated AI-generated
+> codec judged dead by measurement (algorithm number at the wrong byte, 0/128 round-trips,
+> 20 bytes silently dropped).
+
 ---
 
 ## 1. What it does — and where the hardware actually enters

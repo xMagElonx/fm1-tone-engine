@@ -17,6 +17,14 @@ talks to the provider straight from the page.** See [`LLM.md`](LLM.md).
 **In a hurry?** [`SHOWCASE.md`](SHOWCASE.md) is the project on one screen: what it does, how it
 is proven, and what it caught.
 
+> **The one thing here that did not exist before:** the byte-layout cross-checker
+> ([`tools/tablecheck.mjs`](tools/tablecheck.mjs) + report in
+> [`LAYOUT-CROSSCHECK.md`](LAYOUT-CROSSCHECK.md)). It validates any circulated DX7 packed-voice
+> layout table against real voice bytes, using four measurement rulers that need no external
+> authority — the only tool of its kind in this scene. In its first run it judged a widely
+> circulated AI-generated codec dead by measurement: algorithm number at the wrong byte,
+> 0/128 round-trips, 20 bytes silently dropped per voice.
+
 > **⚠ Hardware status — testers welcome.** Everything here runs and is covered by 482 test
 > assertions, **but the device-write path has never touched a real FM-1.** The bytes it sends
 > are byte-identical to real-world captures; what is *not* verified is what the device does
