@@ -17,6 +17,17 @@ talks to the provider straight from the page.** See [`LLM.md`](LLM.md).
 **In a hurry?** [`SHOWCASE.md`](SHOWCASE.md) is the project on one screen: what it does, how it
 is proven, and what it caught.
 
+> **⚠ Hardware status — testers welcome.** Everything here runs and is covered by 482 test
+> assertions, **but the device-write path has never touched a real FM-1.** The bytes it sends
+> are byte-identical to real-world captures; what is *not* verified is what the device does
+> with them — which bank it lands in, whether a 4104-byte SysEx survives the MIDI stack, and
+> whether the browser can claim MIDI access from a local file. If you own an FM-1 on stock
+> firmware: testing takes about five minutes over **USB** (not TRS — long SysEx overflows
+> there), and the step-by-step checklist is [`MIDI-WRITE.md` §6](MIDI-WRITE.md). The honest
+> list of what is and isn't verified is in §4/§5 of the same file. If you test it,
+> [please open an issue](../../issues) with what you saw — including failures; a negative
+> result is exactly what this project needs next.
+
 ---
 
 ## What it does
