@@ -6,6 +6,10 @@ language, export, write to the device.**
 
 **▶ Live: https://fm1-tone-engine.app.workbuddy.host/** — no install, no build, no account.
 
+**Sister project:** [fm1-guitar](https://github.com/xMagElonx/fm1-guitar) — the *performance*
+side of this engine: chord pads, real strumming, palm mute, MIDI out. This repo stays the
+*voice* side (edit, audit, write).
+
 It is a single `index.html`. Double-click it and it runs. No bundler, no npm dependencies,
 no server. Only the device-write feature needs hardware; everything else works with no
 hardware and no network.
