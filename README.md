@@ -336,6 +336,8 @@ you **distinguish** voices in a browser, not to **reproduce** them.
 | Envelope | 4 segments: R1–R3 advance while held, R4 releases on key-up; **timed by level span** (a zero-span segment is near-instant) |
 | Level mapping | 0.75 dB/step; level 0 maps to exactly zero |
 | Feedback | one-sample delayed feedback; amount = (n/7)² |
+| **Velocity sensitivity** | optional `velocity:` render arg (1–127); per-operator `keyVelSens` scales the level (vel 127 = full level always, sens 7 + vel 1 = zero); semantics per the DX7 convention documented by DecentSampler + the DX7 manual |
+| **Pitch EG** | optional `bend:` render arg; level 50 = concert pitch, 6 cents/step (our calibration — the OEM per-step table is not publicly documented); release heads straight to L4 at R4 |
 | Output | peak-normalised to 0.85 (gain capped at 20× so an extremely quiet envelope doesn't get lifted into noise) + 3 ms fade in/out |
 
 ### Not implemented (changes detail, not a bug)
@@ -343,9 +345,7 @@ you **distinguish** voices in a browser, not to **reproduce** them.
 - **Key level scaling** (breakpoint / left-right depth / curve) — it makes one voice brighter
   up high and darker down low
 - **Rate scaling** — it makes envelopes run faster in the upper register
-- **Velocity sensitivity** — preview always uses full velocity
 - **LFO** — so no vibrato or tremolo
-- **Pitch EG** — so no pitch glide at the attack
 - **DX7 bit depth and DAC character** — Dexed emulates this with three engines
   (Modern / Mark I / OPL); this uses an ideal sine
 

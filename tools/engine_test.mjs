@@ -20,6 +20,10 @@ function check(cond, msg, extra) {
   return cond;
 }
 function section(t) { console.log(`\n${t}`); }
+function throws(fn, frag, msg) {
+  try { fn(); return check(false, msg, '没有抛错'); }
+  catch (e) { return check(String(e.message).indexOf(frag) >= 0, msg, e.message); }
+}
 
 /* ------------------------------------------------------------------ 一 */
 section('① 算法表结构审计（32 个算法）');
@@ -86,14 +90,25 @@ function makeVoice({ algorithm, ops }) {
       egR: o.egR || [99, 99, 99, 99],
       egL: o.egL || [99, 99, 99, 0],
       breakPoint: 39, leftDepth: 0, rightDepth: 0, leftCurve: 0, rightCurve: 0,
-      detune: 7, rateScale: 0, keyVelSens: 0, ampModSens: 0,
+      detune: 7, rateScale: 0, keyVelSens: o.keyVelSens || 0, ampModSens: 0,
       outputLevel: o.level == null ? 0 : o.level,
       oscMode: o.oscMode || 0,
       freqCoarse: o.coarse == null ? 1 : o.coarse,
       freqFine: o.fine || 0,
     });
   }
-  return { algorithm, feedback: ops.feedback || 0, ops: list };
+  return {
+    algorithm, feedback: ops.feedback || 0, ops: list,
+    pitchEgR: ops.pitchEgR, pitchEgL: ops.pitchEgL,
+  };
+}
+
+/* 过零率测瞬时频率：窗口内符号变化数 / 2 / 窗口秒（纯正弦时准确） */
+function zeroCrossFreq(buf, from, len, sr) {
+  let crossings = 0;
+  for (let i = from + 1; i < from + len && i < buf.length; i++)
+    if ((buf[i - 1] < 0 && buf[i] >= 0) || (buf[i - 1] >= 0 && buf[i] < 0)) crossings++;
+  return crossings / 2 / (len / sr);
 }
 
 // 2.1 全静音
@@ -255,6 +270,90 @@ section('④ WAV 导出');
   check(view.getUint32(4, true) === 36 + buf.length * 2, 'RIFF 长度字段正确');
   check(view.getUint32(24, true) === SR, '采样率字段正确', `${view.getUint32(24, true)}`);
   check(view.getUint16(22, true) === 1 && view.getUint16(34, true) === 16, '单声道 / 16 bit');
+}
+
+/* ------------------------------------------------------------------ 五 */
+section('⑤ 力度灵敏度（velocity，可选参数）——语义出处见 fm.js 注释');
+
+// 5.1 velFactor 单元：两处独立文档咬合的 DX7 约定
+check(FM.velFactor(0, 1) === 1 && FM.velFactor(0, 64) === 1,
+  'sens 0 = 无力度响应（任何力度都满电平）');
+check(FM.velFactor(7, 127) === 1, 'vel 127 恒为满电平（任何灵敏度）');
+check(FM.velFactor(7, 1) === 0, 'sens 7 + vel 1 → 电平归零');
+check(FM.velFactor(7, 64) === 0.5, 'sens 7 + vel 64 → 恰好半程（手算 1−63/126）');
+{
+  let mono = true;
+  for (let v = 1; v < 127; v++)
+    if (!(FM.velFactor(3, v) <= FM.velFactor(3, v + 1))) mono = false;
+  check(mono, 'velFactor 对 velocity 单调不减（sens 3 全程扫一遍）');
+}
+throws(() => FM.render(makeVoice({ algorithm: 31, ops: { 1: { level: 99 } } }),
+  { sampleRate: SR, duration: 0.2, gate: 0.1, note: 48, velocity: 0 }),
+  '1-127', 'velocity 0 → 报错');
+throws(() => FM.render(makeVoice({ algorithm: 31, ops: { 1: { level: 99 } } }),
+  { sampleRate: SR, duration: 0.2, gate: 0.1, note: 48, velocity: 1.5 }),
+  '1-127', 'velocity 非整数 → 报错');
+
+// 5.2 渲染级：vel 127 与不给力度逐字节相同；vel 1 + sens 7 全静音
+{
+  const v = makeVoice({ algorithm: 31, ops: { 1: { level: 99, keyVelSens: 7 } } });
+  const base = FM.render(v, { sampleRate: SR, duration: 0.3, gate: 0.2, note: 48, normalize: false });
+  const full = FM.render(v, { sampleRate: SR, duration: 0.3, gate: 0.2, note: 48, normalize: false, velocity: 127 });
+  let same = base.length === full.length;
+  if (same) for (let i = 0; i < base.length; i++) if (base[i] !== full[i]) { same = false; break; }
+  check(same, 'vel 127 渲染与无力度参数逐字节相同（力度满格 = 无损）');
+  const soft = FM.render(v, { sampleRate: SR, duration: 0.3, gate: 0.2, note: 48, normalize: false, velocity: 1 });
+  let peak = 0;
+  for (const x of soft) peak = Math.max(peak, Math.abs(x));
+  check(peak === 0, 'sens 7 + vel 1 → 载波电平归零（真静音，不是小声）', `峰值 ${peak}`);
+}
+
+// 5.3 亮度跟着力度走：调制器上布 sens，轻奏 → 无 FM（纯正弦、暗），重奏 → 全 FM（亮）
+{
+  const v = makeVoice({ algorithm: 1, ops: {
+    1: { level: 80, coarse: 1 },
+    2: { level: 80, coarse: 2, keyVelSens: 7 },
+    feedback: 0 } });
+  const opts = { sampleRate: SR, duration: 0.6, gate: 0.5, note: 48, normalize: false };
+  const hard = FM.render(v, Object.assign({}, opts, { velocity: 127 }));
+  const soft = FM.render(v, Object.assign({}, opts, { velocity: 1 }));
+  const N = 8192;
+  const cHard = centroid(spectrum(hard, 0, N));
+  const cSoft = centroid(spectrum(soft, 0, N));
+  check(cHard > cSoft * 1.5, '重奏质心 > 轻奏质心 ×1.5（力度→亮度实测成立）',
+    `hard ${cHard.toFixed(0)} Hz vs soft ${cSoft.toFixed(0)} Hz`);
+}
+
+/* ------------------------------------------------------------------ 六 */
+section('⑥ 音高包络（bend，可选参数）——L1 起音瞬态到 L2 回落');
+
+// 6.1 平包络 + bend = 与无 bend 逐字节相同（中性不引入误差）
+{
+  const v = makeVoice({ algorithm: 31, ops: { 1: { level: 99, coarse: 1 } },
+    pitchEgR: [60, 60, 60, 60], pitchEgL: [50, 50, 50, 50] });
+  const base = FM.render(v, { sampleRate: SR, duration: 0.3, gate: 0.2, note: 69, normalize: false });
+  const bent = FM.render(v, { sampleRate: SR, duration: 0.3, gate: 0.2, note: 69, normalize: false, bend: true });
+  let same = base.length === bent.length;
+  if (same) for (let i = 0; i < base.length; i++) if (base[i] !== bent[i]) { same = false; break; }
+  check(same, '音高包络全 50（中性）+ bend → 与无 bend 逐字节相同');
+}
+
+// 6.2 拨弦瞬态：L1=70（+120 音分）缓慢回落到 L2=50 → 起音频率 ≈ 1.07×f0，尾部 = f0
+{
+  const v = makeVoice({ algorithm: 31, ops: { 1: { level: 99, coarse: 1,
+    egR: [99, 99, 99, 0], egL: [99, 99, 99, 99] },
+    pitchEgR: [30, 60, 60, 60], pitchEgL: [70, 50, 50, 50] } });   // 常响载波 + 拨弦瞬态
+  const buf = FM.render(v, { sampleRate: SR, duration: 2.0, gate: 2.0, note: 69,
+    normalize: false, bend: true });
+  const f0 = 440;
+  /* 窗口给足周期数：过零计数量化误差 = ±1 次，窗口越长越准。
+     R1=30 → 段长 ≈0.4s，前 68ms 电平 70→66.6（约 +100 音分）。 */
+  const fStart = zeroCrossFreq(buf, 0, 3000, SR);
+  const fEnd = zeroCrossFreq(buf, buf.length - 8820, 8820, SR);
+  check(fStart > f0 * 1.02 && fStart < f0 * 1.12,
+    '起音瞬时频率 = +120 音分区间（440 → 449..493 Hz）', `实测 ${fStart.toFixed(1)} Hz`);
+  check(Math.abs(fEnd - f0) < f0 * 0.01, '尾部回落到标准音（±1%）', `实测 ${fEnd.toFixed(1)} Hz`);
+  check(fStart / fEnd > 1.03, '瞬态落差明显（过零率比 > 1.03）', (fStart / fEnd).toFixed(3));
 }
 
 /* ------------------------------------------------------------------ 汇总 */

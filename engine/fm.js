@@ -185,6 +185,29 @@
 
   function midiToHz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
 
+  /* 力度 → 算子电平系数（可选项，opts.velocity 提供时生效）。
+     语义照 DX7 官方约定（两处独立来源咬合）：
+       · DecentSampler 开发者文档："0 = no velocity response (full level
+         regardless of velocity); 7 = maximum velocity scaling (level varies
+         from 0 at vel=1 to full at vel=127)"
+       · DX7 官方手册：灵敏度越大、轻奏时输出越低
+     实现：vel 127 恒为满电平（任何灵敏度）；vel 1 时按 sens/7 线性压低
+     （sens=7 → 电平归零）；中间灵敏度 = 效果强度线性内插。
+     这是"能听出特征"的近似，不是 OEM 曲线表的逐点复刻 —— 引擎定位如此。 */
+  function velFactor(sens, velocity) {
+    if (sens == null || sens <= 0 || velocity == null) return 1;
+    var x = (velocity - 1) / 126;
+    return 1 - (sens / 7) * (1 - x);
+  }
+
+  /* 音高包络电平（0–99）→ 音分偏移。50 = 标准音（DX7 编程指南原文：
+     "the level must be at 50 in order for the keyboard to be sounding
+     concert pitch; above 50 is sharp, below 50 is flat"）。
+     刻度取 6 音分/级（全量程 ±294 音分 ≈ ±3 半音）—— 这是本引擎的校准
+     选择（OEM 换算表未在公开文档中逐级给出），拨弦瞬态/轻微弯音量级
+     正确、可实测复现；timpani 式大幅弯音只会差倍率不差方向。 */
+  function pitchCents(level) { return (level - 50) * 6; }
+
   /* voice.ops 是 packed 顺序：ops[0] = OP6 … ops[5] = OP1 */
   function opByNum(voice, n) { return voice.ops[6 - n]; }
 
@@ -202,6 +225,11 @@
     var gate = (opts.gate == null ? DEF.gate : opts.gate);
     var note = (opts.note == null ? DEF.note : opts.note);
     if (gate > dur) gate = dur * 0.95;
+    var velocity = opts.velocity == null ? null : opts.velocity;
+    if (velocity != null &&
+        (velocity !== Math.floor(velocity) || velocity < 1 || velocity > 127))
+      throw new Error('velocity 必须是 1-127 的整数，实际 ' + velocity);
+    var useBend = !!opts.bend;
 
     var total = Math.round(sr * dur);
     var out = new Float32Array(total);
@@ -224,7 +252,9 @@
     for (var i = 0; i < NN; i++) {
       var o = opByNum(voice, nodes[i].op);
       freq[i] = baseHz * opRatio(o, baseHz);
-      amp[i] = levelToAmp(o.outputLevel);
+      /* 力度灵敏度作用在电平域（指数映射之前）—— 与 DX7 一致：
+         低力度先压低"电平"再走振幅映射，音量与亮度一起变暗 */
+      amp[i] = levelToAmp(o.outputLevel * velFactor(o.keyVelSens, velocity));
       egR[i] = o.egR;
       egL[i] = o.egL;
     }
@@ -252,9 +282,43 @@
     var curOut = new Float64Array(NN);
     var gateSamples = Math.round(gate * sr);
 
+    /* —— 音高包络（opts.bend 时启用）：单一状态机，电平域 0–99，同一套
+       rate→秒数换算。段序 L1→L2→L3→L4；抬键立即向 L4 走 R4（DX7 编程
+       指南原文："when you lift the key, the envelope immediately begins
+       moving toward level four at rate four"）。 */
+    var pR = voice.pitchEgR || [99, 99, 99, 99];
+    var pL = voice.pitchEgL || [50, 50, 50, 50];   /* 缺字段 = 中性（无弯音） */
+    var pStage = 0, pElapsed = 0;
+    var pFromL = pL[0], pToL = pL[1];
+    var pLen = segSeconds(pR[0], pFromL, pToL);
+    var pLevel = pFromL;
+    var pitchMult = useBend ? Math.pow(2, pitchCents(pLevel) / 1200) : 1;
+
     for (var k = 0; k < total; k++) {
       var keyOn = k < gateSamples;
       var sum = 0;
+
+      if (useBend) {
+        if (!keyOn && pStage !== 9 && pStage !== 4) {
+          pStage = 4; pFromL = pLevel; pToL = pL[3];
+          pLen = segSeconds(pR[3], pFromL, pToL); pElapsed = 0;
+        }
+        if (pStage !== 9 && pElapsed < pLen) {
+          pElapsed += dt;
+          if (pElapsed >= pLen) {
+            pLevel = pToL;
+            if (pStage === 0 || pStage === 1) {
+              pStage++;
+              pFromL = pLevel; pToL = pL[pStage + 1];
+              pLen = segSeconds(pR[pStage], pFromL, pToL); pElapsed = 0;
+            } else if (pStage === 2) pStage = 9;
+            /* stage 4（释放）走完停在 L4 */
+          } else {
+            pLevel = pFromL + (pToL - pFromL) * (pElapsed / pLen);
+          }
+        }
+        pitchMult = Math.pow(2, pitchCents(pLevel) / 1200);
+      }
 
       for (var q = 0; q < NN; q++) {
         /* --- 包络 --- */
@@ -277,7 +341,7 @@
         for (var s = 0; s < srcs.length; s++) modPhase += curOut[srcs[s]];
         if (q === plan.fbDst && fbgain > 0) modPhase += fbgain * prevOut[plan.fbSrc];
 
-        phase[q] += freq[q] * dt;
+        phase[q] += freq[q] * pitchMult * dt;
         if (phase[q] >= 1) phase[q] -= Math.floor(phase[q]);
         else if (phase[q] < 0) phase[q] -= Math.floor(phase[q]);
 
@@ -349,6 +413,8 @@
     segSeconds: segSeconds,
     opRatio: opRatio,
     midiToHz: midiToHz,
+    velFactor: velFactor,
+    pitchCents: pitchCents,
     render: render,
     normalize: normalize,
     encodeWav: encodeWav,
