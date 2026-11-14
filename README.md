@@ -533,3 +533,5 @@ The UI itself is in Chinese.
 ---
 
 <sub>[中文版 README](README.zh-CN.md)</sub>
+
+You can also try FM-1 Tone Engine in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
